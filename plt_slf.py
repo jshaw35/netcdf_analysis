@@ -23,20 +23,22 @@ bool_online = False
 
 cwd = os.getcwd()
 
-dir_ext = cwd
+dir_data = '/Users/jonahshaw/Desktop/Fulbright/Bergen files'    # Where the output files should be accessed from
+dir_out = dir_data                                            # Where output folders should be created
 day = datetime.now()
 daystamp = day.strftime("/%m%d%Y")
 tstamp = day.strftime("%H%M%S")
-output_dir = dir_ext + daystamp
+output_dir = dir_out + daystamp
 #print(output_dir)
 
 # create output directory if it does not already exist. Update daily for organizational purposes
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-filepaths0 = []
-#filepaths00 = os.listdir(rootdirs[0])
-filepaths00 = os.listdir(cwd)  # cwd for now, will need to change
+os.chdir('/Users/jonahshaw/Desktop/Fulbright/Bergen files')  # Needed so that xr can work
+#filepaths0 = []
+filepaths00 = os.listdir(os.getcwd())
+#filepaths00 = os.listdir(cwd)  # cwd for now, will need to change
 
 filepaths0 = [x for x in filepaths00 if 'cam.h0.2004' in x]   # List of files within the root directory containing string "cam.h0."
 #print(filepaths0)
