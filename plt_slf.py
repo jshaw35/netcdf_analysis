@@ -19,7 +19,8 @@ import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 
-bool_online = False
+bool_online = True
+bool_save = False
 
 cwd = os.getcwd()
 
@@ -44,9 +45,10 @@ filepaths0 = [x for x in filepaths00 if 'cam.h0.2004' in x]   # List of files wi
 #print(filepaths0)
 
 ind_vars = ['lat', 'lon', 'lev'] # Values shared by all output files
-dep_vars = ['TGCLDCWP', 'TGCLDLWP', 'TGCLDIWP', 'LWC', 'IWC', 'TS'] # dependent variables (unique for each output)
+dep_vars = ['TGCLDCWP', 'TGCLDLWP', 'TGCLDIWP', 'LWC', 'IWC', 'TS', 'MEANSLF_ISOTM', 'CLDTOT_ISOTM'] # dependent variables (unique for each output)
 
 f0 = xr.open_dataset(filepaths0[0]) # Load via xarray
+keys = f0.keys()
 #print("f0 keys: ", f0.keys())  # like an ncdump
 ivar_dict = {}
 for var in ind_vars:
@@ -160,9 +162,9 @@ cbar.ax.tick_params(labelsize=7)
 
 cbar.ax.set_xlabel('$^\circ$C')
 
-filename = "/carto" + tstamp 
-newfig.savefig(output_dir + filename  + '.pdf')
-newfig.clf()
+#filename = "/carto" + tstamp 
+#newfig.savefig(output_dir + filename  + '.pdf')
+#newfig.clf()
 
 fig4 = plt.figure(4) #subplots(nrows=3, ncols=4)
 
@@ -187,9 +189,9 @@ cbar = fig4.colorbar(mpbl, ax=ax4, orientation="horizontal",shrink=0.4)
 cbar.set_label('$^\circ$C')
 cbar.ax.tick_params(labelsize=4) # Could round to 3 digits instead
 
-filename = "/cartomon" + tstamp 
-fig4.savefig(output_dir + filename  + '.pdf')
-fig4.clf()
+#filename = "/cartomon" + tstamp 
+#fig4.savefig(output_dir + filename  + '.pdf')
+#fig4.clf()
 
 fig5 = plt.figure(5)
 
@@ -214,15 +216,22 @@ cmap2 = plt.get_cmap(cmap_p)
 
 nlevels = 41 # Probably relic from 0C to 40C range earlier
 levels1 = np.linspace(cmin_p,cmax_p,nlevels)
-
+levels1 = np.round(levels1*1e4, 2) / 1e4
+# ^this is also an ugly fix
 
 #temp_var = ivar_dict['lev']
+
+# This is good code, but not useful right now:
 right_levs = [x for x in np.array(ivar_dict['lev']) if (np.float(x) > 300 and np.float(x) < 700)]
 col = np.int(len(right_levs)**0.5) + 1
+
 #print("Num right levs: ", len(right_levs))
 #print("Fig 5 dim: ", col)
 #print("WP shape: ", np.shape(dvar_dict['LWC']))
 temp_arr = np.nanmean(dvar_dict['LWC'], axis = 0)[0,:,:,:]
+#temp_arr2 = np.nanmean(dvar_dict['MEANSLF_ISOTM'], axis = 0)[0,:,:,:]
+#temp_arr3 = np.nanmean(dvar_dict['CLDTOT_ISOTM'], axis = 0)[0,:,:,:]
+#temp_arr = dvar_dict['MEANSLF_ISOTM'] / dvar_dict['CLDTOT_ISOTM']
 # This code is ugly and I don't like it!
 
 #filepaths0 = [x for x in filepaths00 if 'cam.h0.2004' in x] 
@@ -237,19 +246,68 @@ for i, lev in enumerate(np.array(ivar_dict['lev'])):
     #    axi = ax_flat[i]
         temp_string = str(np.round(lev,1)) + ' mbar'
     #    axi.set_title(temp_string,fontsize=10)
-        sp.set_title(temp_string,fontsize=10)
+        sp.set_title(temp_string,fontsize=8)
         # plt the variable globally? add to a map?
+        if bool_online: sp.coastlines()
+        
 ax5 = fig5.get_axes()
 
+fig5.subplots_adjust(hspace = 0.55)
 cbar = fig5.colorbar(mpbl, ax=ax5, orientation="horizontal",shrink=0.4)
-cbar.set_label('$^\circ$C')
+cbar.set_label('LWC')
 cbar.ax.tick_params(labelsize=4) # Could round to 3 digits instead
 
-filename = "/slf_alt" + tstamp 
-fig5.savefig(output_dir + filename  + '.pdf')
-fig5.clf()
 
-plt.show()
+fig6 = plt.figure(6)
+
+temp_arr2 = np.nanmean(dvar_dict['MEANSLF_ISOTM'], axis = 0)[0,:,:,:]
+temp_arr3 = np.nanmean(dvar_dict['CLDTOT_ISOTM'], axis = 0)[0,:,:,:]
+temp_arr = np.nanmean((dvar_dict['MEANSLF_ISOTM']/dvar_dict['CLDTOT_ISOTM']), axis = 0)[0,:,:,:]
+
+cmin_p = np.nanmin(temp_arr)
+cmax_p = np.nanmax(temp_arr)
+
+cmap2 = plt.get_cmap(cmap_p)
+
+nlevels = 41 # Probably relic from 0C to 40C range earlier
+levels1 = np.linspace(cmin_p,cmax_p,nlevels)
+arr_temp = [-40, -35, -30, -25, -20, -15, -10, -5, 0]
+
+j = 1
+for i, var in enumerate(temp_arr):
+    sp = fig6.add_subplot(3, 3, j, projection=ccrs.PlateCarree()) # add subplot with correct projection
+    j += 1
+    mpbl = sp.contourf(lon_cam, lat_cam, var, levels1, cmap=cmap2, transform=ccrs.PlateCarree()) # plot the monthly data
+
+#    axi = ax_flat[i]
+    temp_string = str(arr_temp[i]) + '$^\circ$C'
+#    axi.set_title(temp_string,fontsize=10)
+    sp.set_title(temp_string,fontsize=8)
+    # plt the variable globally? add to a map?
+    if bool_online: sp.coastlines()
+
+ax6 = fig6.get_axes()
+
+fig6.subplots_adjust(hspace = 0.55)
+cbar = fig6.colorbar(mpbl, ax=ax6, orientation="horizontal",shrink=0.2)
+cbar.set_label('SLF')
+cbar.ax.tick_params(labelsize=4) # Could round to 3 digits instead
+
+
+if bool_save == True:
+    filename = "/carto" + tstamp 
+    newfig.savefig(output_dir + filename  + '.pdf')
+    newfig.clf()
+    
+    filename = "/cartomon" + tstamp 
+    fig4.savefig(output_dir + filename  + '.pdf')
+    fig4.clf()
+    
+    filename = "/slf_alt" + tstamp 
+    fig5.savefig(output_dir + filename  + '.pdf')
+    fig5.clf()
+
+#plt.show()
 
 def var_avg(arr_var): # general function to average across monthly data sets
     # assume three dimensions, could specify dim later. Maybe always assume format (blah, blah,..., lat, lon)
