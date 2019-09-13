@@ -19,6 +19,8 @@ import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 
+from cplot import cplot
+
 bool_online = True
 bool_save = False
 
@@ -59,6 +61,7 @@ f0.close()
 lat_cam = ivar_dict['lat'][:]
 lon_cam = ivar_dict['lon'][:] # selects all longitude 'lon' values from the netcdf instance
 lev_cam = ivar_dict['lev'][:]
+#print(lon_cam)
 
 # JShaw's plan
 # for each variable in dep_vars:
@@ -122,17 +125,17 @@ for i, files in enumerate(filepaths0):
 
 #print(vars_cam_t - 273.15)
 vars_cam_yt = np.nanmean(vars_cam_t) # Annual single average
-vars_cam_yavg = np.nanmean(vars_cam_tavg, axis = 0) #lat-lon annual average
+vars_cam_yavg = np.nanmean(vars_cam_tavg, axis = 0) #lat-lon (2D) annual average
 
-cmin_p = np.nanmin(vars_cam_tavg)
-cmax_p = np.nanmax(vars_cam_tavg)
+cmin_p = np.nanmin(vars_cam_yavg)
+cmax_p = np.nanmax(vars_cam_yavg)
 #print("Min: ", str(cmin_p), " Max: ", str(cmax_p))
 
 cmap_p = 'bwr'
 
 nlevels = 41
 
-datap = np.copy(vars_cam_tavg)
+datap = np.copy(vars_cam_yavg)
 datap = datap - 273.15 # Convert to C
 
 if cmin_p == cmax_p:
@@ -146,11 +149,12 @@ cmap2 = plt.get_cmap(cmap_p)
 nlevels = 41 # Probably relic from 0C to 40C range earlier
 levels1 = np.linspace(cmin_p,cmax_p,nlevels)
 
-newfig = plt.figure(3)
+newfig = plt.figure()
 ax3 = newfig.add_subplot(111, projection=ccrs.PlateCarree())
 
 
-ct = ax3.contourf(lon_cam, lat_cam, vars_cam_tavg[i,:,:], levels1, cmap=cmap2, transform=ccrs.PlateCarree())
+#ct = ax3.contourf(lon_cam, lat_cam, vars_cam_tavg[i,:,:], levels1, cmap=cmap2, transform=ccrs.PlateCarree())
+ct = ax3.contourf(lon_cam, lat_cam, vars_cam_yavg, levels1, cmap=cmap2, transform=ccrs.PlateCarree())
 tempstr = str(np.round(vars_cam_yt - 273.15, 2)) + " C"
 ax3.set_title(tempstr)
 
@@ -166,7 +170,7 @@ cbar.ax.set_xlabel('$^\circ$C')
 #newfig.savefig(output_dir + filename  + '.pdf')
 #newfig.clf()
 
-fig4 = plt.figure(4) #subplots(nrows=3, ncols=4)
+fig4 = plt.figure() #subplots(nrows=3, ncols=4)
 
 #for i in range(len(filepaths0)):
 for i, month in enumerate(dvar_dict['TS']):
@@ -193,7 +197,7 @@ cbar.ax.tick_params(labelsize=4) # Could round to 3 digits instead
 #fig4.savefig(output_dir + filename  + '.pdf')
 #fig4.clf()
 
-fig5 = plt.figure(5)
+fig5 = plt.figure()
 
 cmin_p = np.nanmin(dvar_dict['LWC'])
 cmax_p = np.nanmax(dvar_dict['LWC'])
@@ -258,7 +262,7 @@ cbar.set_label('LWC')
 cbar.ax.tick_params(labelsize=4) # Could round to 3 digits instead
 
 
-fig6 = plt.figure(6)
+fig6 = plt.figure()
 
 temp_arr2 = np.nanmean(dvar_dict['MEANSLF_ISOTM'], axis = 0)[0,:,:,:]
 temp_arr3 = np.nanmean(dvar_dict['CLDTOT_ISOTM'], axis = 0)[0,:,:,:]
@@ -287,12 +291,6 @@ for i, var in enumerate(temp_arr):
     if bool_online: sp.coastlines()
 
 ax6 = fig6.get_axes()
-
-fig6.subplots_adjust(hspace = 0.55)
-cbar = fig6.colorbar(mpbl, ax=ax6, orientation="horizontal",shrink=0.2)
-cbar.set_label('SLF')
-cbar.ax.tick_params(labelsize=4) # Could round to 3 digits instead
-
 
 if bool_save == True:
     filename = "/carto" + tstamp 
