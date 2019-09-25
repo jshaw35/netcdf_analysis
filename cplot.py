@@ -33,7 +33,7 @@ def cplot(var_arr, arr_lat, arr_lon, lev = 41):
     
     # Calculate the correct subplot dimensions
     timesteps = np.shape(var_arr)[0]
-    col = np.int(timesteps**(0.5)); rem = timesteps % col;
+    col = np.int(timesteps**(0.5)); rem = timesteps % (timesteps**(0.5));
     if rem > 0: col += 1
 
     fig = plt.figure() # Create the figure object
