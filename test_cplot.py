@@ -25,7 +25,7 @@ User inputs:
 '''
 
 bool_online = True
-bool_save = False
+bool_save = True
 
 dir_data = '/Users/jonahshaw/Desktop/Fulbright/Bergen files'  # Where the data files should be accessed from
 #dir_data = '/false/false'
@@ -39,6 +39,8 @@ dep_vars = ['TGCLDCWP', 'TGCLDLWP', 'TGCLDIWP', 'LWC', 'IWC', 'TS', 'MEANSLF_ISO
 END USER INPUTS
 """
 
+figs = [] # To store figures and their saved names
+
 # Move to directory where data is stored. Quit if the directory does not exist.
 try:
     os.chdir(dir_data)
@@ -49,7 +51,7 @@ except OSError:
 
 # Create folder to store output figures
 day = datetime.now()
-daystamp = day.strftime("/%m%d%Y")
+daystamp = day.strftime("/%m%d%Y/")
 tstamp = day.strftime("%H%M%S")
 output_dir = dir_out + daystamp
 
@@ -89,6 +91,8 @@ for i, aax in enumerate(tsax):
 #newcbar = [left, bottom - 0.15, width, height]
 #tsax[-1].set_position(newcbar)
 
+figs.append([varplot, "surface temps"])
+
 # Now have some fun with SLFs
 slf = np.nanmean((dvar_dict['MEANSLF_ISOTM']/dvar_dict['CLDTOT_ISOTM']), axis = 0)[0,:,:,:]
 arr_temp = [-40, -35, -30, -25, -20, -15, -10, -5, 0]
@@ -107,5 +111,16 @@ cbar = varplot.colorbar(mapp, ax=tsax, orientation="horizontal")
 cbar.set_label("SLF")
 cbar.ax.tick_params(labelsize=8)
     
+figs.append([newfig, "slf"])
+
 # And we're done, yay!
 plt.show()
+
+if bool_save == True:
+    for tosave in figs:
+        tempname = tosave[1] + tstamp 
+        tosave[0].savefig(output_dir + tempname  + '.pdf')
+        tosave[0].clf()    
+
+#else:
+#    plt.show()
