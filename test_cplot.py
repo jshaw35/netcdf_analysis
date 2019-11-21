@@ -20,6 +20,7 @@ from datetime import datetime
 
 from cplot import cplot
 from cplot import CDFextract
+
 '''
 User inputs:
 '''
@@ -27,7 +28,7 @@ User inputs:
 bool_online = True
 bool_save = True
 
-dir_data = '/Users/jonahshaw/Desktop/Fulbright/Bergen files'  # Where the data files should be accessed from
+dir_data = '/uio/kant/geo-gjest-u1/jonahks/Documents/cesm1data' #'~/Documents/cesm1data' #'/Users/jonahshaw/Desktop/Fulbright/Bergen files'  # Where the data files should be accessed from
 #dir_data = '/false/false'
 dir_out = dir_data                                            # Where output folders should be created
 file_ext = 'cam.h0.2004'                                      # str to separate files of interest within the working directory
@@ -38,15 +39,13 @@ dep_vars = ['TGCLDCWP', 'TGCLDLWP', 'TGCLDIWP', 'LWC', 'IWC', 'TS', 'MEANSLF_ISO
 """
 END USER INPUTS
 """
-
-figs = [] # To store figures and their saved names
-
+tosave = []
 # Move to directory where data is stored. Quit if the directory does not exist.
 try:
     os.chdir(dir_data)
     
 except OSError:
-    print('Directory ' + dir_data + ' does not exist.')
+    print('Directory ' + dir_data + ' does not exist. Exiting...')
     sys.exit(1)
 
 # Create folder to store output figures
@@ -85,6 +84,7 @@ for i, aax in enumerate(tsax):
     aax.set_title(filepaths0[i][-10:-3])
     if bool_online: aax.coastlines()
     
+tosave.append([varplot, 'ts'])
 # Manually move the colorbar down to fix positioning
 #cbarxy = np.array(tsax[-1].get_position())
 #left = cbarxy[0][0]; bottom = cbarxy[0][1]; width = cbarxy[1][0] - cbarxy[0][0]; height = cbarxy[1][1] - cbarxy[0][1]
@@ -110,17 +110,15 @@ for i, aax in enumerate(tsax):  # Ignore the last axis, which is the colorbar
 cbar = varplot.colorbar(mapp, ax=tsax, orientation="horizontal")
 cbar.set_label("SLF")
 cbar.ax.tick_params(labelsize=8)
-    
-figs.append([newfig, "slf"])
+
+tosave.append([newfig, 'slf'])
+
+if bool_save:
+    for i in tosave:
+        temp_fig = i[0]; temp_name = i[1];
+        filename = "/" + temp_name + tstamp 
+        temp_fig.savefig(output_dir + filename  + '.pdf')
+        temp_fig.clf()
 
 # And we're done, yay!
-plt.show()
-
-if bool_save == True:
-    for tosave in figs:
-        tempname = tosave[1] + tstamp 
-        tosave[0].savefig(output_dir + tempname  + '.pdf')
-        tosave[0].clf()    
-
-#else:
-#    plt.show()
+else: plt.show()
