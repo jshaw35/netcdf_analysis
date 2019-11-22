@@ -50,7 +50,7 @@ except OSError:
 
 # Create folder to store output figures
 day = datetime.now()
-daystamp = day.strftime("/%m%d%Y")
+daystamp = day.strftime("/%m%d%Y/")
 tstamp = day.strftime("%H%M%S")
 output_dir = dir_out + daystamp
 
@@ -90,6 +90,8 @@ tosave.append([varplot, 'ts'])
 #left = cbarxy[0][0]; bottom = cbarxy[0][1]; width = cbarxy[1][0] - cbarxy[0][0]; height = cbarxy[1][1] - cbarxy[0][1]
 #newcbar = [left, bottom - 0.15, width, height]
 #tsax[-1].set_position(newcbar)
+
+figs.append([varplot, "surface temps"])
 
 # Now have some fun with SLFs
 slf = np.nanmean((dvar_dict['MEANSLF_ISOTM']/dvar_dict['CLDTOT_ISOTM']), axis = 0)[0,:,:,:]
