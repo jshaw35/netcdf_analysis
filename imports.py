@@ -57,7 +57,6 @@ def load_and_reload():
         _ipython.magic('autoreload 2')
     except:
         # in case we are running a script
-        _ipython.magic('no autoreload')
         pass
 
 
