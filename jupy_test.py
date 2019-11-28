@@ -5,10 +5,10 @@
 
 
 from imports import (
-        pd, np, xr, mpl, plt, sns, os, 
-        datetime, sys, crt, gridspec,
-        polyfit, ccrs
-        )
+            pd, np, xr, mpl, plt, sns, os, 
+            datetime, sys, crt, gridspec,
+            polyfit, ccrs
+            )
 
 from functions import (
     masked_average, interpretNS, plot_slf_isotherms, 
@@ -37,17 +37,15 @@ def main(model = None):
 
     relevant_vars = [
     'CLDFREE', 'CLDHGH','CLDICE', 'CLDLIQ', 'CLDLOW','CLDMED',
-    'CLDTAU','CLDTOT','CLD_ISOTM','CLD_ISOTM_NONSIM','CLD_SLF',
-    'CLD_SLF_NONSIM','CLOUD','CLOUDCOVER_CLUBB','CLOUDFRAC_CLUBB',
+    'CLDTAU','CLDTOT','CLD_ISOTM','CLD_ISOTM_NONSIM','CLD_SLF',    'CLD_SLF_NONSIM','CLOUD','CLOUDCOVER_CLUBB','CLOUDFRAC_CLUBB',
     'CONCLD', 'BERGO','BERGOXCLD_ISOTM','BERGOXCLD_ISOTM_NONSIM',
     'BERGSO','BERGSOXCLD_ISOTM','BERGSOXCLD_ISOTM_NONSIM',
     'MG_SADICE','MG_SADLIQ','MNUCCCO','MNUCCDO','MNUCCDOhet',
     'MNUCCRO','MNUCCTO','NUMICE','NUMLIQ','NUMRAI','NUMSNO',
-    'N_AER','PRECIPBINOCC_CC','PRECIPBINOCC_CL','PRECIPBINOCC_CT',
+   'N_AER','PRECIPBINOCC_CC','PRECIPBINOCC_CL','PRECIPBINOCC_CT',
     'PRECIPBINRATE_CC','PRECIPBINRATE_CL','PRECIPBINRATE_CT', 
-    'SADICEXCLD_ISOTM','SADICEXCLD_ISOTM_NONSIM','SADLIQXCLD_ISOTM',
-    'SADLIQXCLD_ISOTM_NONSIM','SLFXCLD_ISOTM','SLFXCLD_ISOTM_NONSIM',
-    'cell_weight','SLF_ISOTM','SLF_ISOTM_AVG', 'TS'
+ 'SADICEXCLD_ISOTM','SADICEXCLD_ISOTM_NONSIM','SADLIQXCLD_ISOTM', 'SADLIQXCLD_ISOTM_NONSIM','SLFXCLD_ISOTM','SLFXCLD_ISOTM_NONSIM',
+        'cell_weight','SLF_ISOTM','SLF_ISOTM_AVG', 'TS'
     ]
 
     # In[ ]:
@@ -72,14 +70,13 @@ def main(model = None):
     slf_files.sort()
 
     if caliop_processed:
-    print('Grabbing data from %s' % data_string)
-    all_caliop = pd.read_csv(data_string)
+        print('Grabbing data from %s' % data_string)
+        all_caliop = pd.read_csv(data_string)
 
     else:
-    print('Writing data to %s' % data_string)
-    all_caliop = process_caliop(slf_files, obs_dir)
-
-    all_caliop.to_csv(path_or_buf = data_string)
+        print('Writing data to %s' % data_string)
+        all_caliop = process_caliop(slf_files, obs_dir)
+        all_caliop.to_csv(path_or_buf = data_string)
 
     all_caliop = all_caliop.set_index('Isotherm')
     all_caliop
@@ -97,12 +94,12 @@ def main(model = None):
     noresm_processed = False
 
     if noresm_processed:
-    print('Grabbing data from %s' % data_path)
-    ds = xr.open_dataset(data_path)
+        print('Grabbing data from %s' % data_path)
+        ds = xr.open_dataset(data_path)
 
     else:
-    print('Loading data from %s' % (model_dir + specific_model))
-    ds = process_for_slf(model_dir + specific_model, relevant_vars)
+        print('Loading data from %s' % (model_dir + specific_model))
+        ds = process_for_slf(model_dir + specific_model, relevant_vars)
     #    ds.to_netcdf(data_path)
 
 
@@ -113,18 +110,18 @@ def main(model = None):
     all_slf_processed = os.path.exists(data_string)
 
     if all_slf_processed:
-    print('Loading from %s' % data_string)
-    all_slf = pd.read_csv(data_string)
+        print('Loading from %s' % data_string)
+        all_slf = pd.read_csv(data_string)
 
     else:
-    print('Processing from netcdf-based xarray object and saving to %s' % data_string)
-    df = noresm_slf_to_df(ds, slf_files)
+        print('Processing from netcdf-based xarray object and saving to %s' % data_string)
+        df = noresm_slf_to_df(ds, slf_files)
 
-    all_slf = pd.concat([all_caliop, df], axis=1, sort=False)
-    all_slf['Arctic Error'] = all_slf['NorESM_90N-70N'] - all_slf['CALIOP_90N-70N']
-    all_slf['Global Error'] = all_slf['NorESM_Average'] - all_slf['CALIOP Average']
+        all_slf = pd.concat([all_caliop, df], axis=1, sort=False)
+        all_slf['Arctic Error'] = all_slf['NorESM_90N-70N'] - all_slf['CALIOP_90N-70N']
+        all_slf['Global Error'] = all_slf['NorESM_Average'] - all_slf['CALIOP Average']
 
-    all_slf.to_csv(path_or_buf = data_string)
+        all_slf.to_csv(path_or_buf = data_string)
 
 
     # In[8]:
@@ -177,8 +174,8 @@ def main(model = None):
     filename = '%s_slf_comparison.png' % case
     filename
     if not os.path.exists(filename):
-    fig1.savefig(model_dir + filename,format = 'png', dpi = 200)
-    fig1.clf()
+        fig1.savefig(model_dir + filename,format = 'png', dpi = 200)
+        fig1.clf()
 
 
     # Plot the global SLF at each isotherm
@@ -191,8 +188,8 @@ def main(model = None):
     filename = '%s_noresm_slf_isotherms.png' % case
     filename
     if not os.path.exists(filename):
-    iso_fig.savefig(model_dir + filename,format = 'png', dpi = 200)
-    iso_fig.clf()
+        iso_fig.savefig(model_dir + filename,format = 'png', dpi = 200)
+        iso_fig.clf()
 
 if __name__ == "__main__":
     main(sys.argv[1])

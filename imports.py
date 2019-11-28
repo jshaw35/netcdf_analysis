@@ -36,6 +36,11 @@ import seaborn as sns
 import importlib as il
 import glob
 import random
+
+from sklearn.model_selection import train_test_split 
+from sklearn.linear_model import LinearRegression
+from sklearn import metrics
+
 #import pyaerocom as pya
 
 def load_and_reload():

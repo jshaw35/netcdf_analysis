@@ -239,3 +239,15 @@ def noresm_slf_to_df(ds, slf_files):
     df = df.set_index('Isotherm')
     
     return df
+
+def regress_1d(xdata, ydata):
+    '''
+    Returns an sklearn regression object trained on the passed data.
+    Might be generalizable to higher dimensions.
+    '''
+    x = np.array(xdata).reshape(-1,1)
+    y = np.array(ydata).reshape(-1,1)
+    
+    regressor = LinearRegression().fit(x, y)
+    
+    return regressor
