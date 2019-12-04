@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import matplotlib.path as mpath
 import matplotlib.gridspec as gridspec
 from matplotlib.colors import LogNorm
+from mpl_toolkits.mplot3d import Axes3D
 
 import cartopy as crt
 import cartopy.crs as ccrs
