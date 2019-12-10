@@ -206,7 +206,7 @@ def process_for_slf(in_path, out_vars):
     return a xr dataset with just variables of interest
     '''
     
-    ds = xr.open_dataset(in_path)
+    ds = xr.open_dataset(in_path + '.nc')
     ds = add_weights(ds)
 
     # Create new variable by dividing out the cloud fraction near each isotherm
