@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import matplotlib.path as mpath
 import matplotlib.gridspec as gridspec
 from matplotlib.colors import LogNorm
+from mpl_toolkits.mplot3d import Axes3D
 
 import cartopy as crt
 import cartopy.crs as ccrs
@@ -36,6 +37,11 @@ import seaborn as sns
 import importlib as il
 import glob
 import random
+
+from sklearn.model_selection import train_test_split 
+from sklearn.linear_model import LinearRegression
+from sklearn import metrics
+
 #import pyaerocom as pya
 
 def load_and_reload():
@@ -57,7 +63,6 @@ def load_and_reload():
         _ipython.magic('autoreload 2')
     except:
         # in case we are running a script
-        _ipython.magic('no autoreload')
         pass
 
 

@@ -186,6 +186,9 @@ def plot_slf_isotherms(ds):
     return fig1
 
 def add_weights(ds):
+    '''
+    And variable to ds for weighting of lat,lon variables
+    '''
     gw = ds['gw']    
 
     _wgs = ds['TS'].copy().mean(dim = 'time', skipna=True)
@@ -196,3 +199,64 @@ def add_weights(ds):
     ds['cell_weight'] = _wgs
     
     return ds
+
+def process_for_slf(in_path, out_vars):
+    '''
+    Add SLF-relevant variables to netcdf file
+    return a xr dataset with just variables of interest
+    '''
+    
+    ds = xr.open_dataset(in_path + '.nc')
+    ds = add_weights(ds)
+
+    # Create new variable by dividing out the cloud fraction near each isotherm
+    ds['SLF_ISOTM'] = ds['SLFXCLD_ISOTM'] / ds['CLD_ISOTM']
+
+    # Select dates after a 3 month wind-up and average slf
+    ds['SLF_ISOTM_AVG'] = ds['SLF_ISOTM'].sel(time=slice('0001-04-01', '0002-03-01')).mean(dim = 'time', skipna=True)
+
+    stdev = np.std(ds['SLF_ISOTM_AVG'], axis=2)    
+    
+    ds_out = ds[out_vars]
+    ds.close()
+    
+    return ds_out
+
+def noresm_slf_to_df(ds, slf_files):
+    '''
+    Applies appropriate latitude masks to NorESM SLF based on CALIOP file names
+    '''
+    df = pd.DataFrame()
+
+    df['Isotherm'] = ds['isotherms_mpc'].values - 273.15
+    df['NorESM_Average'] = 100*masked_average(ds['SLF_ISOTM_AVG'], dim=['lat','lon'], weights=ds['cell_weight'])
+    
+    df['NorESM_Average_STD'] = 100*np.std(ds['SLF_ISOTM_AVG'], axis=(1,2))
+
+    # Add each latitude range from NorESM, and the models stdev range
+    for i in slf_files:
+        _, _lowlat, _highlat = interpretNS(i)
+        _mask = np.bitwise_or(ds['lat']<_lowlat, ds['lat']>_highlat)
+        
+        zone_mean = masked_average(ds['SLF_ISOTM_AVG'], dim=['lat','lon'], weights=ds['cell_weight'], mask=_mask)
+        df['NorESM' + i[10:-4]] = 100*zone_mean
+
+        # Add Standard Deviation
+        df['NorESM' + i[10:-4] + '_STD'] = 100*np.std(ds['SLF_ISOTM_AVG'].sel(lat=slice(_lowlat,_highlat)), axis=(1,2)) 
+        
+        
+    df = df.set_index('Isotherm')
+    
+    return df
+
+def regress_1d(xdata, ydata):
+    '''
+    Returns an sklearn regression object trained on the passed data.
+    Might be generalizable to higher dimensions.
+    '''
+    x = np.array(xdata).reshape(-1,1)
+    y = np.array(ydata).reshape(-1,1)
+    
+    regressor = LinearRegression().fit(x, y)
+    
+    return regressor

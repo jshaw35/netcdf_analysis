@@ -215,6 +215,8 @@ def process_for_slf(in_path, out_vars):
     # Select dates after a 3 month wind-up and average slf
     ds['SLF_ISOTM_AVG'] = ds['SLF_ISOTM'].sel(time=slice('0001-04-01', '0002-03-01')).mean(dim = 'time', skipna=True)
 
+    stdev = np.std(ds['SLF_ISOTM_AVG'], axis=2)    
+    
     ds_out = ds[out_vars]
     ds.close()
     
@@ -228,14 +230,21 @@ def noresm_slf_to_df(ds, slf_files):
 
     df['Isotherm'] = ds['isotherms_mpc'].values - 273.15
     df['NorESM_Average'] = 100*masked_average(ds['SLF_ISOTM_AVG'], dim=['lat','lon'], weights=ds['cell_weight'])
+    
+    df['NorESM_Average_STD'] = 100*np.std(ds['SLF_ISOTM_AVG'], axis=(1,2))
 
-    # Add each latitude range from CALIOP
+    # Add each latitude range from NorESM, and the models stdev range
     for i in slf_files:
         _, _lowlat, _highlat = interpretNS(i)
         _mask = np.bitwise_or(ds['lat']<_lowlat, ds['lat']>_highlat)
+        
         zone_mean = masked_average(ds['SLF_ISOTM_AVG'], dim=['lat','lon'], weights=ds['cell_weight'], mask=_mask)
         df['NorESM' + i[10:-4]] = 100*zone_mean
 
+        # Add Standard Deviation
+        df['NorESM' + i[10:-4] + '_STD'] = 100*np.std(ds['SLF_ISOTM_AVG'].sel(lat=slice(_lowlat,_highlat)), axis=(1,2)) 
+        
+        
     df = df.set_index('Isotherm')
     
     return df
