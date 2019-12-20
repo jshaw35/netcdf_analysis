@@ -89,6 +89,8 @@ class SLF_Metric(object):
         for i in self.cases:
             _case = self.cases[i]
             label = 'WBF: %.3f INP: %.3f, %.3f SLF RMS error' % (_case.wbf_mult, _case.inp_mult, _case.rms_error)
+            
+#            if _case.inp_mult == 0: Not sure how to catch this error
             plt.annotate('', xy=(_case.wbf_mult, _case.inp_mult), xytext=(self.origin.wbf_mult, self.origin.inp_mult), 
                         arrowprops=dict(facecolor='black', shrink=0., width=0.5, lw=1.0),
                         )
