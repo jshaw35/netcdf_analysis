@@ -152,7 +152,10 @@ def process_caliop(files, obs_dir):
     return all_caliop
 
 def plot_slf_isotherms(ds):
-    slf_isotm = ds['SLF_ISOTM_AVG']    
+    try: # bad fix!
+        slf_isotm = ds['SLF_ISOTM_AVG']    
+    except KeyError:
+        slf_isotm = ds['CT_SLF_ISOTM_AVG']
     
     fig1, axes1 = plt.subplots(nrows=3,ncols=3, subplot_kw={'projection': ccrs.PlateCarree()}, figsize=[20,10]);
 
@@ -212,11 +215,12 @@ def process_for_slf(in_path, out_vars):
     # Create new variable by dividing out the cloud fraction near each isotherm
     ds['SLF_ISOTM'] = ds['SLFXCLD_ISOTM'] / ds['CLD_ISOTM']
 
-    # Select dates after a 3 month wind-up and average slf
-    ds['SLF_ISOTM_AVG'] = ds['SLF_ISOTM'].sel(time=slice('0001-04-01', '0002-03-01')).mean(dim = 'time', skipna=True)
-
-    stdev = np.std(ds['SLF_ISOTM_AVG'], axis=2)    
-    
+    # Select dates after a 3 month wind-up and average slf, unless it is a monthlong test run
+    if (len(ds['time']) > 1):
+        ds['SLF_ISOTM_AVG'] = ds['SLF_ISOTM'].sel(time=slice('0001-04-01', '0002-03-01')).mean(dim = 'time', skipna=True)
+    else: 
+        ds['SLF_ISOTM_AVG'] = ds['SLF_ISOTM'].mean(dim = 'time', skipna=True)
+            
     ds_out = ds[out_vars]
     ds.close()
     
