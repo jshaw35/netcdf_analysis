@@ -20,3 +20,9 @@
 .ipynb_checkpoints/cloudtop_vs_bulk-checkpoint.ipynb
 .ipynb_checkpoints/regression_testbed-checkpoint.ipynb
 .ipynb_checkpoints/cloudprofile_alajenny-checkpoint.ipynb
+__pycache__
+__pycache__/imports.cpython-37.pyc
+__pycache__/functions.cpython-37.pyc
+__pycache__/cplot.cpython-37.pyc
+__pycache__/cplot.cpython-36.pyc
+__pycache__/classes.cpython-37.pyc
