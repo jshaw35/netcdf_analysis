@@ -1,4 +1,4 @@
-from imports import *
+from Common.imports import *
 
 import xarray as xr
 import numpy as np
@@ -151,11 +151,22 @@ def process_caliop(files, obs_dir):
     
     return all_caliop
 
-def plot_slf_isotherms(ds):
-    try: # bad fix!
-        slf_isotm = ds['SLF_ISOTM_AVG']    
-    except KeyError:
-        slf_isotm = ds['CT_SLF_ISOTM_AVG']
+def plot_slf_isotherms(ds, var=None, isovar=None):
+    '''
+    simple way to visualize SLF, first arg is the xarray ds
+    optional second arg is the SLF variable as a string
+    '''
+    if isovar != None:
+        isostr = isovar
+    else: isostr = 'isotherms_mpc'
+    
+    if var != None:
+        slf_isotm = ds[var]
+    else:
+        try: # bad fix!
+            slf_isotm = ds['SLF_ISOTM_AVG']    
+        except KeyError:
+            slf_isotm = ds['CT_SLF_ISOTM_AVG']
     
     fig1, axes1 = plt.subplots(nrows=3,ncols=3, subplot_kw={'projection': ccrs.PlateCarree()}, figsize=[20,10]);
 
@@ -172,7 +183,7 @@ def plot_slf_isotherms(ds):
     levels = np.linspace(cmin_p,cmax_p,nlevels)
 
     for data, ax in zip(slf_isotm, axes1.flatten()):
-        iso = data['isotherms_mpc'].values - 273.15
+        iso = data[isostr].values - 273.15
         map = data.plot(ax=ax, transform=ccrs.PlateCarree(), cmap='bwr', 
                         robust=True, add_colorbar = False, levels=levels)
 
@@ -190,7 +201,7 @@ def plot_slf_isotherms(ds):
 
 def add_weights(ds):
     '''
-    And variable to ds for weighting of lat,lon variables
+    Add variable to ds for weighting of lat,lon variables
     '''
     gw = ds['gw']    
 
@@ -217,7 +228,13 @@ def process_for_slf(in_path, out_vars):
 
     # Select dates after a 3 month wind-up and average slf, unless it is a monthlong test run
     if (len(ds['time']) > 1):
-        ds['SLF_ISOTM_AVG'] = ds['SLF_ISOTM'].sel(time=slice('0001-04-01', '0002-03-01')).mean(dim = 'time', skipna=True)
+        try:
+            ds['SLF_ISOTM_AVG'] = ds['SLF_ISOTM'].sel(time=slice('0001-04-01',
+                                '0002-03-01')).mean(dim = 'time', skipna=True)
+        except:
+            ds['SLF_ISOTM_AVG'] = ds['SLF_ISOTM'].sel(time=slice('2001-04-01',
+                                '2002-03-01')).mean(dim = 'time', skipna=True)
+            
     else: 
         ds['SLF_ISOTM_AVG'] = ds['SLF_ISOTM'].mean(dim = 'time', skipna=True)
             

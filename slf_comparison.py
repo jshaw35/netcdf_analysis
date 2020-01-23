@@ -14,6 +14,10 @@
 # ---
 
 # +
+import sys
+# Add common resources folder to path
+sys.path.append("/mnt/mcc-ns9600k/jonahks/git_repos/netcdf_analysis/Common/")
+
 from imports import (
     pd, np, xr, mpl, plt, sns, os, 
     datetime, sys, crt, gridspec,
@@ -60,7 +64,7 @@ all_cases
 
 # +
 #specific_model = '20191219_151155_singleparam_cttest_wbf_1_inp_1.cam.h0.0001-01.nc'
-specific_model = '20191122_161009_sampleparamset_wbf_1_inp_1.nc'
+specific_model = '20200112_002538_singleparam_nudge_wbf_1_inp_0.nc'
 #ct_val = '20191219_151155_singleparam_cttest_wbf_1_inp_1.cam.h0.0001-01.nc'
 case = specific_model[:-3]
 
@@ -217,3 +221,5 @@ filename
 if not os.path.exists(filename):
     iso_fig.savefig(model_dir + filename,format = 'png', dpi = 200)
     iso_fig.clf()
+
+

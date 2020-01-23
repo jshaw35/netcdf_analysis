@@ -13,9 +13,16 @@
 #     name: python3
 # ---
 
+# # Compare observations of cloudtop SLF from Olimpia to those produced by NorESM
+# Using a modified micro_mg_cam.F90 that can be found in noresm_slf repo.
+
 # ## Necessary Imports
 
 # +
+import sys
+# Add common resources folder to path
+sys.path.append("/mnt/mcc-ns9600k/jonahks/git_repos/netcdf_analysis/Common/")
+
 from imports import (
     pd, np, xr, mpl, plt, sns, os, 
     datetime, sys, crt, gridspec,
@@ -65,7 +72,8 @@ all_cases
 # Pick run to analyze
 
 # +
-specific_model = '20191230_130025_singleparam_cttest15_wbf_1_inp_1.nc'
+specific_model = '20200116_130416_nudged_wbfmods_wbf_10_inp_1.nc'
+#specific_model = '20191230_130025_singleparam_cttest15_wbf_1_inp_1.nc'
 case = specific_model[:-3]
 
 run_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
@@ -80,14 +88,13 @@ relevant_vars = [
      'CLDTAU','CLDTOT','CLD_ISOTM','CLD_ISOTM_NONSIM','CLD_SLF',
      'CLD_SLF_NONSIM','CLOUD','CLOUDCOVER_CLUBB','CLOUDFRAC_CLUBB',
      'CONCLD', 'BERGO','BERGOXCLD_ISOTM','BERGOXCLD_ISOTM_NONSIM',
-     'BERGSO','BERGSOXCLD_ISOTM','BERGSOXCLD_ISOTM_NONSIM',
      'MG_SADICE','MG_SADLIQ','MNUCCCO','MNUCCDO','MNUCCDOhet',
      'MNUCCRO','MNUCCTO','NUMICE','NUMLIQ','NUMRAI','NUMSNO',
      'N_AER','PRECIPBINOCC_CC','PRECIPBINOCC_CL','PRECIPBINOCC_CT',
      'PRECIPBINRATE_CC','PRECIPBINRATE_CL','PRECIPBINRATE_CT', 
      'SADICEXCLD_ISOTM','SADICEXCLD_ISOTM_NONSIM','SADLIQXCLD_ISOTM',
      'SADLIQXCLD_ISOTM_NONSIM','SLFXCLD_ISOTM','SLFXCLD_ISOTM_NONSIM',
-     'cell_weight','SLF_ISOTM','SLF_ISOTM_AVG', 'TS', 'CT_CLD_ISOTM',
+     'cell_weight', 'TS', 'CT_CLD_ISOTM',
      'CT_SLF', 'CT_SLFXCLD_ISOTM'
     ]
 
@@ -98,10 +105,14 @@ relevant_vars = [
 
 # +
 # Load NorESM data
-ds = xr.open_dataset('%s/%s.nc' % (run_dir,case))
-if (len(ds['time']) > 1):
-    ds = ds.sel(time=slice('0001-04-01', '0002-03-01'))
-ds = add_weights(ds)
+_ds = xr.open_dataset('%s/%s.nc' % (run_dir,case))
+if (len(_ds['time']) > 1):
+    try:
+        ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))
+    except:
+        ds = _ds.sel(time=slice('2000-04-01', '2001-03-01'))
+#        ds = _ds.isel(time=slice(3,15))
+ds = add_weights(ds) # still has time here
 
 ds['CT_SLF'] = ds['CT_SLFXCLD_ISOTM']/ds['CT_CLD_ISOTM']
 ct_slf_noresm = ds['CT_SLF']
@@ -114,7 +125,12 @@ ct_slf_caliop = xr.open_dataset('caliop_cloudtop/cloudtop_slfs.nc')
 
 # Define latitude ranges of interest.
 
-bands = {'Global':[-90,90],'Arctic':[66.667,90],'Antarctic':[-90,-66.667]}
+slfvars = ['cell_weight', 'gw', 'TS', 'CT_SLF','CT_SLF_ISOTM_AVG','CT_SLFXCLD_ISOTM','CT_CLD_ISOTM','SLFXCLD_ISOTM','CLD_ISOTM']
+doop = ds[slfvars]
+del doop.attrs['_NCProperties'] # fixes a bug for some reasons: https://github.com/pydata/xarray/issues/2822
+doop.to_netcdf(path='%s/%s_slfvars.nc' % (run_dir,case))
+
+bands = {'Global':[-90,90],'Arctic':[66.667,90],'Antarctic':[-90,-66.667],'CALIOP Arctic':[66.667,82]}
 df = pd.DataFrame()
 
 #df['isotherm'] = slf1['isotherm']
@@ -142,7 +158,7 @@ for i in bands:
 df['isotherm'] = slf1['isotherm']
 df
 
-data_string = '%scloudtop_slf_comparison.csv' % run_dir
+data_string = '%s%scloudtop_slf_comparison.csv' % (run_dir, case)
 df.to_csv(path_or_buf = data_string)
 
 # +
@@ -159,10 +175,45 @@ fig1.gca().invert_yaxis()
 f1_ax1.set_title('Supercooled Liquid Fraction Comparison'); f1_ax1.set_ylabel('Isotherm (C)'); f1_ax1.set_xlabel('SLF (%)')
 f1_ax2.set_title('NorESM error'); f1_ax2.set_xlabel('SLF Error (%)')
 
-colors = ['blue', 'orange', 'red']
+colors = ['blue', 'orange', 'red', 'purple']
 
 for b,c in zip(bands, colors):
-    if b == 'Arctic':
+    if (b == 'Arctic' or b == 'CALIOP Arctic'):
+        f1_ax1.errorbar(df['CALIOP %s SLF' % b], df['isotherm'], xerr=2*df['CALIOP %s StDev' % b], label='CALIOP %s' % b, color = c, fmt='o', marker='D')
+        f1_ax1.plot(df['NorESM %s SLF' % b], df['isotherm'], color = c) #, label=b)
+        f1_ax1.fill_betweenx(df['isotherm'], df['NorESM %s SLF' % b] - 2*df['NorESM %s StDev' % b], df['NorESM %s SLF' % b] + 2*df['NorESM %s StDev' % b], alpha=0.2, color=c)
+
+        slf_error = df['NorESM %s SLF' % b] - df['CALIOP %s SLF' % b]
+        f1_ax2.scatter(slf_error, df['isotherm'], color=c, label=b)
+
+#_r = regress_1d(isos, all_slf_clean[error])
+#_s = _r.score(isos, all_slf_clean[error])
+#f1_ax2.plot(_r.predict(isos), isos, color=color, label = ('$R^2 = %f$' % _s))
+
+f1_ax1.set_xlim((0,105))
+f1_ax1.legend()
+f1_ax2.legend()
+
+fig1.suptitle(case, fontsize=16)
+
+# +
+fig1 = plt.figure(figsize=(10,6))#constrained_layout=True)
+spec1 = gridspec.GridSpec(ncols=3, nrows=1, figure=fig1)#, hspace=0.4)
+f1_ax1 = fig1.add_subplot(spec1[0, :-1])
+f1_ax2 = fig1.add_subplot(spec1[0, -1], sharey=f1_ax1)
+axes = [f1_ax1, f1_ax2]
+plt.setp(f1_ax2.get_yticklabels(), visible=False)
+
+#isos = np.array(all_slf_clean.index).reshape(-1,1)
+
+fig1.gca().invert_yaxis()
+f1_ax1.set_title('Supercooled Liquid Fraction Comparison'); f1_ax1.set_ylabel('Isotherm (C)'); f1_ax1.set_xlabel('SLF (%)')
+f1_ax2.set_title('NorESM error'); f1_ax2.set_xlabel('SLF Error (%)')
+
+colors = ['blue', 'orange', 'red','purple']
+#print(bands)
+for b,c in zip(bands, colors):
+    if b == 'CALIOP Arctic':
         f1_ax1.errorbar(df['CALIOP %s SLF' % b], df['isotherm'], xerr=2*df['CALIOP %s StDev' % b], label='CALIOP %s' % b, color = c, fmt='o', marker='D')
         f1_ax1.plot(df['NorESM %s SLF' % b], df['isotherm'], color = c) #, label=b)
         f1_ax1.fill_betweenx(df['isotherm'], df['NorESM %s SLF' % b] - 2*df['NorESM %s StDev' % b], df['NorESM %s SLF' % b] + 2*df['NorESM %s StDev' % b], alpha=0.2, color=c)
@@ -198,38 +249,3 @@ if not os.path.exists(filename):
     iso_fig.clf()
 
 # # TRash!
-
-# +
-hybrid_weight = ds['cell_weight']#*ds['CT_CLD_ISOTM'] # I am trying to weight by both the cloud amount and gridbox area
-
-mask = ct_slf_noresm['lat']>70
-
-weighted_ct_slf = 100*masked_average(ct_slf_noresm, dim=['lat','lon','time'],weights=hybrid_weight, mask=mask)
-weighted_ct_slf = 100*masked_average(ct_slf_noresm, dim=['lat','lon','time'], mask=mask)
-
-ct_slf_noresm_arc = weighted_ct_slf
-
-
-# +
-ct_slf_caliop = xr.open_dataset('caliop_cloudtop/cloudtop_slfs.nc')['SLF']
-
-arctic_avg = 100*ct_slf_caliop.sel(lat=slice(70,90)).mean(dim=['lat','lon'])
-arctic_stdev = 100*np.std(ct_slf_caliop.sel(lat=slice(70,90)), axis=(0,1)) 
-global_avg = 100*ct_slf_caliop.mean(dim=['lat','lon'])
-global_stdev = 100*np.std(ct_slf_caliop, axis=(0,1)) 
-# -
-
-# Calculate the 'equivalent' cloudtop variable from the model outpt
-
-# +
-ds = xr.open_dataset('%s/%s.nc' % (run_dir,case))
-if (len(ds['time']) > 1):
-    ds = ds.sel(time=slice('0001-04-01', '0002-03-01'))
-ds = add_weights(ds)
-
-ct_slf_noresm = ds['CT_SLFXCLD_ISOTM']/ds['CT_CLD_ISOTM']
-# should weight by both area and cloud fraction here
-ct_slf_noresm_arc = 100*ct_slf_noresm.sel(lat=slice(70,90)).mean(dim=['lat','lon'])
-# -
-
-# Calculate the same averages from the model output.
