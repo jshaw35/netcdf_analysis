@@ -51,7 +51,7 @@ def __weighted_average(dim, weights, xa, xa_copy):
     xa_weighted_average = xw_sum / x_tot
     return xa_weighted_average
 
-
+# I want to retain the metadata
 def __weighted_average_with_mask(dim, mask, weights, xa, xa_copy):
     '''helper function for masked_average'''
     _, mask_all_dims = xr.broadcast(xa, mask)  # broadcast to all dims

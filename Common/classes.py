@@ -1,6 +1,8 @@
 from imports import *
 from functions import *
 
+np.seterr(divide='ignore', invalid='ignore')
+
 class SLF_Metric(object):
     
     def __init__(self, casedir):
@@ -159,6 +161,7 @@ class SLF_case:
 class CT_SLF_Metric(object):
     
     def __init__(self, casedir):
+        np.seterr(divide='ignore', invalid='ignore') # testing to remove error message
         for cls in reversed(self.__class__.mro()):
             if hasattr(cls, 'init'):
                 cls.init(self, casedir)
@@ -243,24 +246,21 @@ class CT_SLF_Metric(object):
                                     '2001-03-01'))
                 
             weight = _case['cell_weight']
-            mask = np.bitwise_or(_case['lat']<70, _case['lat']>90)
+            mask = np.bitwise_or(_case['lat']<70, _case['lat']>82) # caliop doesn't go north of 82lat
             slf = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon', 'time'], weights=weight, mask=mask)
-
+            
+            err = np.array(slf)[::2][:-1] - np.array(self.bulk_caliop_slf['CALIOP_70S-90S'][:-1])
+            rms = np.sqrt(np.mean(np.square(err)))
+            
             _case['SLF_ISOTM_TAVG'] = _case['SLF_ISOTM'].mean(dim = 'time', skipna=True)
-#            weight = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this
-#            mask = np.bitwise_or(_case['lat']<70, _case['lat']>90)
             
             stdev = 100*np.std(_case['SLF_ISOTM_TAVG'].sel(lat=slice(70,90)), axis=(1,2))
-
-#            slf = 100*masked_average(_case['SLF_ISOTM_TAVG'], dim=['lat','lon'], weights=weight, mask=mask)
-#            plt.plot(slf, slf['isotherms_mpc'] - 273, label=_case.case, linestyle='-', marker='o')
-            plt.scatter(slf, slf['isotherms_mpc'] - 273, label=_run.label)
-#            plt.errorbar(slf, slf['isotherms_mpc'] - 273, xerr=stdev, label=_case.case)
-        
+            plt.scatter(slf, slf['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms))
+            
         plt.xlabel('SLF Error (%)')
         plt.ylabel('Isotherm (C)')
         plt.legend()
-        plt.title('Bulk cloud SLF trends with INP modifications', fontsize=16)
+        plt.title('Bulk cloud SLF trends with INP and WBF modifications', fontsize=16)
         
         return isos_plot
     
@@ -269,31 +269,82 @@ class CT_SLF_Metric(object):
         plt.gca().invert_yaxis()
 
         caliop_weight = self.ct_caliop_slf['cell_weight']
-        caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<66.667, self.ct_caliop_slf['lat']>90)
+        caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<66.667, self.ct_caliop_slf['lat']>82)
         caliop_slf = 100*masked_average(self.ct_caliop_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
         caliop_stdev = 100*np.std(self.ct_caliop_slf['SLF'].sel(lat=slice(66.667,90)), axis=(0,1))
-        
-        plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', fmt='o', marker='D', color = 'black')
+        plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', fmt='o', marker='D', color = 'black', zorder=0)
 
         for j, i in enumerate(self.cases):
             _run = self.cases[i]
             _case = _run.case_da
             _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
-#            weight = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this weighting
-#            mask = np.bitwise_or(_case['lat']<70, _case['lat']>90)
-#            slf = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon'], weights=weight, mask=mask)
 
             weight = _case['cell_weight']*_case['CT_CLD_ISOTM'] #Not sure about this weighting
             mask = np.bitwise_or(_case['lat']<70, _case['lat']>90)
             slf = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon', 'time'], weights=weight, mask=mask)
+            err = np.array(slf) - np.array(caliop_slf)
+            rms = np.sqrt(np.mean(np.square(err)))
 
-            plt.scatter(slf, slf['isotherms_mpc'] - 273, label=_run.label)
-            
+            plt.scatter(slf, slf['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms), zorder=j)
+        
         plt.xlabel('SLF Error (%)')
         plt.ylabel('Isotherm (C)')
         plt.legend()
-        plt.title('Cloudtop SLF trends with INP modifications', fontsize=16)
+        plt.title('Cloudtop SLF trends with INP and WBF modifications', fontsize=16)
                                
+        return isos_plot
+    
+    def plot_isos_all(self):        
+        isos_plot = plt.figure(figsize=[10,10])
+        plt.gca().invert_yaxis()
+
+        plt.plot(self.bulk_caliop_slf['CALIOP_70S-90S'], self.bulk_caliop_slf['Isotherm'], 
+                 color='black', label='CALIOP', linestyle='-',marker='o')
+        caliop_weight = self.ct_caliop_slf['cell_weight']
+        caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<66.667, self.ct_caliop_slf['lat']>82)
+        caliop_slf = 100*masked_average(self.ct_caliop_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
+        caliop_stdev = 100*np.std(self.ct_caliop_slf['SLF'].sel(lat=slice(66.667,90)), axis=(0,1))
+        _line = plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', fmt='o', color = 'black', zorder=0, linestyle='-', marker='D')
+               
+        colors = ['blue','green','red','orange','purple','yellow']
+        labels = ['CALIOP SLF']
+        lines = [_line] 
+        for i,color in zip(self.cases, colors):
+            _run = self.cases[i]
+            _case = _run.case_da
+            
+            # Cloudtop SLF part
+            _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
+            weight_ct = _case['cell_weight']*_case['CT_CLD_ISOTM'] #Not sure about this weighting
+            mask = np.bitwise_or(_case['lat']<70, _case['lat']>82)
+            slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon', 'time'], weights=weight_ct, mask=mask)
+            err = np.array(slf_ct) - np.array(caliop_slf)
+            rms_ct = np.sqrt(np.mean(np.square(err)))
+
+            _line = plt.scatter(slf_ct, slf_ct['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_ct), color=color, marker='D')
+            
+            # Bulk SLF part
+            try:
+                _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(time=slice('0001-04-01',
+                                    '0002-03-01'))
+            except:
+                _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(time=slice('2000-04-01',
+                                    '2001-03-01'))
+                
+            weight_bulk = _case['cell_weight']
+            slf_bulk = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon', 'time'], weights=weight_bulk, mask=mask)
+            err = np.array(slf_bulk)[::2][:-1] - np.array(self.bulk_caliop_slf['CALIOP_70S-90S'][:-1])
+            rms_bulk = np.sqrt(np.mean(np.square(err)))
+            
+            plt.scatter(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color)
+            labels.append(_run.label+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
+            lines.append(_line)
+            
+        plt.xlabel('SLF (%)', fontsize=18)
+        plt.ylabel('Isotherm (C)', fontsize=18)
+        plt.legend(lines, labels)
+        plt.title('SLF trends with microphysical modifications', fontsize=24)
+        
         return isos_plot
     
     def plot_parameterspace(self):
@@ -341,6 +392,7 @@ class CT_SLF_case:
         strg = '%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case)
         print(strg)
         _ds = xr.open_dataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case))
+#        _ds = xr.open_mfdataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case), combine='by_coords')
         if (len(_ds['time']) > 1):
             try:
                 ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))

@@ -68,15 +68,17 @@ print('Can access all directory paths:', access_paths)
 
 all_cases = os.listdir('mnth15runs/')
 all_cases
+inp_cases = os.listdir('inp_validation/')
+inp_cases
 
 # Pick run to analyze
 
 # +
-specific_model = '20200116_130416_nudged_wbfmods_wbf_10_inp_1.nc'
+specific_model = '20200131_120716_singleparam_nimaxmod_wbf_1_inp_100.nc'
 #specific_model = '20191230_130025_singleparam_cttest15_wbf_1_inp_1.nc'
 case = specific_model[:-3]
 
-run_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
+run_dir = 'inp_validation/%s/' % case # inconsistent label compared to jupy_test
 #run_dir = 'NorESM_validation/%s' % ct_val
 print(run_dir, os.path.exists(run_dir))
 # -
@@ -95,7 +97,10 @@ relevant_vars = [
      'SADICEXCLD_ISOTM','SADICEXCLD_ISOTM_NONSIM','SADLIQXCLD_ISOTM',
      'SADLIQXCLD_ISOTM_NONSIM','SLFXCLD_ISOTM','SLFXCLD_ISOTM_NONSIM',
      'cell_weight', 'TS', 'CT_CLD_ISOTM',
-     'CT_SLF', 'CT_SLFXCLD_ISOTM'
+     'CT_SLF', 'CT_SLFXCLD_ISOTM', 
+     'AREI','FREQI','NUMICE','NUMICE10s','DSTFREZIMM', 'DSTFREZCNT',
+     'DSTFREZDEP','NNUCCTO', 'NNUCCCO', 'NNUDEPO', 'NIHOMOO',
+     'HOMOO','NIMIX_CNT','NIMIX_IMM','RELHUM','T','RHO_CLUBB'
     ]
 
 # This currently doesn't really work. WATT
@@ -105,7 +110,10 @@ relevant_vars = [
 
 # +
 # Load NorESM data
-_ds = xr.open_dataset('%s/%s.nc' % (run_dir,case))
+try:
+    _ds = xr.open_dataset('%s/%s.nc' % (run_dir,case))
+except:
+    _ds = xr.open_dataset('%s/atm/hist/%s.cam.h0.2000-01.nc' % (run_dir,case))
 if (len(_ds['time']) > 1):
     try:
         ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))
@@ -125,7 +133,11 @@ ct_slf_caliop = xr.open_dataset('caliop_cloudtop/cloudtop_slfs.nc')
 
 # Define latitude ranges of interest.
 
-slfvars = ['cell_weight', 'gw', 'TS', 'CT_SLF','CT_SLF_ISOTM_AVG','CT_SLFXCLD_ISOTM','CT_CLD_ISOTM','SLFXCLD_ISOTM','CLD_ISOTM']
+slfvars = ['cell_weight', 'gw', 'TS', 'CT_SLF','CT_SLF_ISOTM_AVG','CT_SLFXCLD_ISOTM',
+           'CT_CLD_ISOTM','SLFXCLD_ISOTM','CLD_ISOTM',
+           'AREI','FREQI','NUMICE','NUMICE10s','DSTFREZIMM', 'DSTFREZCNT',
+           'DSTFREZDEP','NNUCCTO', 'NNUCCCO', 'NNUDEPO', 'NIHOMOO',
+           'HOMOO','NIMIX_CNT','NIMIX_IMM','RELHUM','T','RHO_CLUBB']
 doop = ds[slfvars]
 del doop.attrs['_NCProperties'] # fixes a bug for some reasons: https://github.com/pydata/xarray/issues/2822
 doop.to_netcdf(path='%s/%s_slfvars.nc' % (run_dir,case))
