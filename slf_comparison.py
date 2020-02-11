@@ -59,16 +59,14 @@ access_paths = os.path.exists(obs_dir) and os.path.exists(output_dir) and os.pat
 print('Can access all directory paths:', access_paths)
 # -
 
-all_cases = os.listdir('mnth15runs/')
+all_cases = os.listdir('inp_validation//')
 all_cases
 
 # +
-#specific_model = '20191219_151155_singleparam_cttest_wbf_1_inp_1.cam.h0.0001-01.nc'
-specific_model = '20200112_002538_singleparam_nudge_wbf_1_inp_0.nc'
-#ct_val = '20191219_151155_singleparam_cttest_wbf_1_inp_1.cam.h0.0001-01.nc'
-case = specific_model[:-3]
+case = '20200207_145043_singleparam_icenucmod_wbf_1_inp_10'
 
-model_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
+#model_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
+model_dir = 'inp_validation/%s/' % case # inconsistent label compared to jupy_test
 #model_dir = 'NorESM_validation/%s' % ct_val
 os.path.exists(model_dir)
 # -
@@ -132,9 +130,7 @@ if noresm_processed:
     ds = xr.open_dataset(data_path)
 
 else:
-#    print('Processing data from %s' % (model_dir + specific_model))
     print('Processing data from %s' % (model_dir + case))
-#    ds = process_for_slf(model_dir + specific_model, relevant_vars)
     ds = process_for_slf(model_dir + case, relevant_vars)
 #    ds.to_netcdf(data_path)
 
@@ -221,5 +217,22 @@ filename
 if not os.path.exists(filename):
     iso_fig.savefig(model_dir + filename,format = 'png', dpi = 200)
     iso_fig.clf()
+
+mods_dir = 'inp_validation/'
+
+# +
+cc = '20200128_142110_singleparam_frzrtvarsm1_wbf_1_inp_1'
+controlcontrol = xr.open_dataset('%s/%s/atm/hist/%s.cam.h0.2000-01.nc' % (mods_dir, cc, cc))
+
+c = '20200207_145043_singleparam_icenucmod_wbf_1_inp_1'
+control = xr.open_dataset('%s/%s/atm/hist/%s.cam.h0.2000-01.nc' % (mods_dir, c, c))
+
+# -
+
+(controlcontrol['MNUCCCO'][0,20,:,:]-control['MNUCCCO'][0,20,:,:]).plot()
+
+control['MNUCCCO'][0,20,:,:].plot()
+
+controlcontrol['MNUCCCO'][0,20,:,:].plot()
 
 

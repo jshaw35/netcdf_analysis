@@ -219,8 +219,33 @@ def process_for_slf(in_path, out_vars):
     Add SLF-relevant variables to netcdf file
     return a xr dataset with just variables of interest
     '''
+
+    '''    
+try:
+    _ds = xr.open_dataset('%s/%s.nc' % (run_dir,case))
+except:
+    _ds = xr.open_dataset('%s/atm/hist/%s.cam.h0.2000-01.nc' % (run_dir,case))
+if (len(_ds['time']) > 1):
+    try:
+        ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))
+    except:
+        ds = _ds.sel(time=slice('2000-04-01', '2001-03-01'))
+else:
+    ds = _ds
+ds = add_weights(ds) # still has time here
+
+ds['CT_SLF'] = ds['CT_SLFXCLD_ISOTM']/ds['CT_CLD_ISOTM']
+ct_slf_noresm = ds['CT_SLF']
+
+ds['CT_SLF_ISOTM_AVG'] = ds['CT_SLF'].mean(dim = 'time', skipna=True)
+'''
+
+    model_dir, case, _ = in_path.split('/')
     
-    ds = xr.open_dataset(in_path + '.nc')
+    try:
+        ds = xr.open_dataset(in_path + '.nc')
+    except:
+        ds = xr.open_dataset('%s/%s/atm/hist/%s.cam.h0.2000-01.nc' % (model_dir, case, case))
     ds = add_weights(ds)
 
     # Create new variable by dividing out the cloud fraction near each isotherm
