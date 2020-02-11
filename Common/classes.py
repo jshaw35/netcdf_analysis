@@ -306,7 +306,7 @@ class CT_SLF_Metric(object):
         caliop_stdev = 100*np.std(self.ct_caliop_slf['SLF'].sel(lat=slice(66.667,90)), axis=(0,1))
         _line = plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', fmt='o', color = 'black', zorder=0, linestyle='-', marker='D')
                
-        colors = ['blue','green','red','orange','purple','yellow']
+        colors = ['blue','green','red','orange','purple','yellow', 'pink']
         labels = ['CALIOP SLF']
         lines = [_line] 
         for i,color in zip(self.cases, colors):
@@ -315,9 +315,10 @@ class CT_SLF_Metric(object):
             
             # Cloudtop SLF part
             _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
-            weight_ct = _case['cell_weight']*_case['CT_CLD_ISOTM'] #Not sure about this weighting
+            # this order of things must be thought about.
+            weight_ct = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this weighting
             mask = np.bitwise_or(_case['lat']<70, _case['lat']>82)
-            slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon', 'time'], weights=weight_ct, mask=mask)
+            slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon'], weights=weight_ct, mask=mask)
             err = np.array(slf_ct) - np.array(caliop_slf)
             rms_ct = np.sqrt(np.mean(np.square(err)))
 

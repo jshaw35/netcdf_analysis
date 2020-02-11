@@ -68,18 +68,17 @@ print('Can access all directory paths:', access_paths)
 
 all_cases = os.listdir('mnth15runs/')
 all_cases
+
 inp_cases = os.listdir('inp_validation/')
 inp_cases
 
 # Pick run to analyze
 
 # +
-specific_model = '20200131_120716_singleparam_nimaxmod_wbf_1_inp_100.nc'
-#specific_model = '20191230_130025_singleparam_cttest15_wbf_1_inp_1.nc'
-case = specific_model[:-3]
+case = '20200207_145043_singleparam_icenucmod_wbf_1_inp_10'
 
-run_dir = 'inp_validation/%s/' % case # inconsistent label compared to jupy_test
-#run_dir = 'NorESM_validation/%s' % ct_val
+#run_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
+run_dir = 'inp_validation/%s' % case
 print(run_dir, os.path.exists(run_dir))
 # -
 
@@ -119,7 +118,8 @@ if (len(_ds['time']) > 1):
         ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))
     except:
         ds = _ds.sel(time=slice('2000-04-01', '2001-03-01'))
-#        ds = _ds.isel(time=slice(3,15))
+else:
+    ds = _ds
 ds = add_weights(ds) # still has time here
 
 ds['CT_SLF'] = ds['CT_SLFXCLD_ISOTM']/ds['CT_CLD_ISOTM']
