@@ -19,6 +19,12 @@
 # ## Necessary Imports
 
 # +
+from dask.distributed import Client
+
+client = Client("tcp://127.0.0.1:38201")
+client
+
+# +
 import sys
 # Add common resources folder to path
 sys.path.append("/mnt/mcc-ns9600k/jonahks/git_repos/netcdf_analysis/Common/")
@@ -66,19 +72,22 @@ print('Can access all directory paths:', access_paths)
 
 # List case to choose one of interest
 
-all_cases = os.listdir('mnth15runs/')
+all_cases = os.listdir('inp_validation/')
 all_cases
-
-inp_cases = os.listdir('inp_validation/')
-inp_cases
 
 # Pick run to analyze
 
 # +
-case = '20200207_145043_singleparam_icenucmod_wbf_1_inp_10'
+case = '20200131_120716_singleparam_nimaxmod_wbf_1_inp_100'
 
 #run_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
 run_dir = 'inp_validation/%s' % case
+print(run_dir, os.path.exists(run_dir))
+
+# +
+case = '20200109_1541_wbf_1.0_inp_1.0'
+
+run_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
 print(run_dir, os.path.exists(run_dir))
 # -
 
@@ -136,10 +145,13 @@ ct_slf_caliop = xr.open_dataset('caliop_cloudtop/cloudtop_slfs.nc')
 slfvars = ['cell_weight', 'gw', 'TS', 'CT_SLF','CT_SLF_ISOTM_AVG','CT_SLFXCLD_ISOTM',
            'CT_CLD_ISOTM','SLFXCLD_ISOTM','CLD_ISOTM',
            'AREI','FREQI','NUMICE','NUMICE10s','DSTFREZIMM', 'DSTFREZCNT',
-           'DSTFREZDEP','NNUCCTO', 'NNUCCCO', 'NNUDEPO', 'NIHOMOO',
-           'HOMOO','NIMIX_CNT','NIMIX_IMM','RELHUM','T','RHO_CLUBB']
+           'DSTFREZDEP'] #,'NNUCCTO', 'NNUCCCO', 'NNUDEPO', 'NIHOMOO',
+          # 'HOMOO','NIMIX_CNT','NIMIX_IMM','RELHUM','T','RHO_CLUBB']
 doop = ds[slfvars]
-del doop.attrs['_NCProperties'] # fixes a bug for some reasons: https://github.com/pydata/xarray/issues/2822
+try:
+    del doop.attrs['_NCProperties'] # fixes a bug for some reasons: https://github.com/pydata/xarray/issues/2822
+except:
+    pass
 doop.to_netcdf(path='%s/%s_slfvars.nc' % (run_dir,case))
 
 bands = {'Global':[-90,90],'Arctic':[66.667,90],'Antarctic':[-90,-66.667],'CALIOP Arctic':[66.667,82]}

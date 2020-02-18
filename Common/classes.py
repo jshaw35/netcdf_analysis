@@ -159,14 +159,20 @@ class SLF_case:
         self.rms_error = np.sqrt(np.nanmean(np.power(self.error,2)))
         
 class CT_SLF_Metric(object):
+    '''
+    Used by JShaw for visualizing SLF data along isotherms from cloudtop and in-cloud metrics
+    Initialized with a primary directory for locating data files and optional number of timesteps to use.
+    Could be updated for a more arbitrary selection of time period.
     
-    def __init__(self, casedir):
+    '''
+    
+    def __init__(self, casedir, timesteps=None, sel_month=None):
         np.seterr(divide='ignore', invalid='ignore') # testing to remove error message
         for cls in reversed(self.__class__.mro()):
             if hasattr(cls, 'init'):
-                cls.init(self, casedir)
+                cls.init(self, casedir, timesteps, sel_month)
 
-    def init(self, casedir):
+    def init(self, casedir, time_steps, sel_month):
         # Catch directory issues from the get-go
         if not os.path.exists(casedir):
             print('The case directory %s does not exist' % casedir)
@@ -175,6 +181,8 @@ class CT_SLF_Metric(object):
         self.case_dir = casedir
         self.origin = None
         self.cases = {}
+        self.time_steps = time_steps
+        self.month = sel_month
         try:
             self.ct_caliop_slf = xr.open_dataset('caliop_cloudtop/cloudtop_slfs.nc')
         except:
@@ -190,8 +198,12 @@ class CT_SLF_Metric(object):
             self.add_case(case) 
         self.origin = self.cases[case] # should have a check for the object type
         
-    def add_case(self, case): # Dictionary can be overwritten, should be fine
-        self.cases[case] = CT_SLF_case(self.case_dir, case) # Add a ct_slf_case object to the cases dictionary
+    def add_case(self, case, path=None): # Dictionary can be overwritten, should be fine
+        if path == None:
+            self.cases[case] = CT_SLF_case(self.case_dir, case, timesteps=self.time_steps, months=self.month) # Add a ct_slf_case object to the cases dictionary
+        else:
+            self.cases[case] = CT_SLF_case(path, case, timesteps=self.time_steps, months=self.month) # Add a ct_slf_case object to the cases dictionary
+            
     
     def get_case(self, case):
         if case not in self.cases: # check if it is already in the dictionary
@@ -238,6 +250,7 @@ class CT_SLF_Metric(object):
         for i in self.cases:
             _run = self.cases[i]
             _case = _run.case_da
+            _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM'])
             try:
                 _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(time=slice('0001-04-01',
                                     '0002-03-01'))
@@ -325,12 +338,15 @@ class CT_SLF_Metric(object):
             _line = plt.scatter(slf_ct, slf_ct['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_ct), color=color, marker='D')
             
             # Bulk SLF part
-            try:
-                _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(time=slice('0001-04-01',
-                                    '0002-03-01'))
-            except:
-                _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(time=slice('2000-04-01',
-                                    '2001-03-01'))
+            # handle one-month runs here
+            _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM'])
+            
+#            try:
+#                _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(time=slice('0001-04-01',
+#                                    '0002-03-01'))
+#            except:
+#                _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(time=slice('2000-04-01',
+#                                    '2001-03-01'))
                 
             weight_bulk = _case['cell_weight']
             slf_bulk = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon', 'time'], weights=weight_bulk, mask=mask)
@@ -347,6 +363,31 @@ class CT_SLF_Metric(object):
         plt.title('SLF trends with microphysical modifications', fontsize=24)
         
         return isos_plot
+    
+    def plot_single_var(self, var_str):
+        '''
+        Plot a single variable against 'lev' for loaded cases. Argument is the variable string name.
+        '''
+        
+        test_plot = plt.figure(figsize=[10,10])
+
+        test_plot.gca().invert_yaxis()
+        for _casename in self.cases:
+            _da = self.cases[_casename].case_da
+            print(_da.variables)
+            working_da = _da[var_str].sel(lat=slice(70,90)) # select variable and lat range
+            working_da = working_da.mean(dim='time') # select time or average by it
+            weight = working_da['cell_weight']
+            avg_var = masked_average(working_da, dim=['lat','lon'],weights=weight) # finally actually compute on the bounded variable of interest
+            plt.plot(avg_var, avg_var['lev'], label=_case.label)#, color=color)
+
+        xaxis_label = '%s (%s)' % (avg_var.long_name, avg_var.units)
+
+        plt.legend(loc='upper right')
+        test_plot.suptitle(avg_var.long_name, fontsize=24)
+        plt.xlabel(xaxis_label); plt.ylabel('Hybrid Sigma pressure (hPa)');
+
+        return test_plot
     
     def plot_parameterspace(self):
         parameterspace_plot = plt.figure(figsize=[10,10])       
@@ -378,9 +419,11 @@ class CT_SLF_Metric(object):
     
 class CT_SLF_case:
     
-    def __init__(self, casedir, case):
+    def __init__(self, casedir, case, timesteps, months):
         self.case_dir = casedir # General directory where all cases are stored
         self.case = case # The origin case name (wbf = 1, slf = 1)
+        self.time_steps = timesteps
+        self.months = np.array(months)
         
         self.add_ds()
         
@@ -393,8 +436,17 @@ class CT_SLF_case:
         strg = '%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case)
         print(strg)
         _ds = xr.open_dataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case))
+        # Do I only want to use this processed file? Probably variable-wise.
 #        _ds = xr.open_mfdataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case), combine='by_coords')
-        if (len(_ds['time']) > 1):
+
+        if self.time_steps != None: # if user has specified the number of steps to be used just index
+            print("Just taking the first %s timesteps" % self.time_steps)
+            ds = _ds.isel(time=slice(0,self.time_steps))
+        
+        elif self.months != None:  # select the desired months
+            ds = _ds.sel(time=self.month_check(_ds['time.month']))
+        
+        elif (len(_ds['time']) > 1):
             try:
                 ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))
             except:
@@ -408,3 +460,17 @@ class CT_SLF_case:
         ds['CT_SLF_ISOTM_AVG'] = ds['CT_SLF'].mean(dim = 'time', skipna=True)
         self.case_da = ds
         
+    def month_check(self, month_data):
+        _bools = []
+#        print(month_data)
+ #       print("Months wanted: %s" % self.months)
+        for i in month_data:
+  #          print(i.values)
+            try:
+#                print(i. values in self.months)
+                _bools.append(i in self.months)
+                
+            except: pass
+#        print(_bools)
+        
+        return _bools
