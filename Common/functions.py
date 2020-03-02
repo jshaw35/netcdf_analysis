@@ -22,18 +22,19 @@ def masked_average(xa:xr.DataArray,
     :return: masked average xarray
     """
     #lest make a copy of the xa
-    xa_copy:xr.DataArray = xa.copy()
+    with xr.set_options(keep_attrs=True): # testing this
+        xa_copy:xr.DataArray = xa.copy()
 
-    if mask is not None:
-        xa_weighted_average = __weighted_average_with_mask(
-            dim, mask, weights, xa, xa_copy
-        )
-    elif weights is not None:
-        xa_weighted_average = __weighted_average(
-            dim, weights, xa, xa_copy
-        )
-    else:
-        xa_weighted_average =  xa.mean(dim)
+        if mask is not None:
+            xa_weighted_average = __weighted_average_with_mask(
+                dim, mask, weights, xa, xa_copy
+            )
+        elif weights is not None:
+            xa_weighted_average = __weighted_average(
+                dim, weights, xa, xa_copy
+            )
+        else:
+            xa_weighted_average =  xa.mean(dim)
 
     return xa_weighted_average
 
@@ -205,7 +206,11 @@ def add_weights(ds):
     '''
     gw = ds['gw']    
 
-    _wgs = ds['TS'].copy().mean(dim = 'time', skipna=True)
+#    _wgs = ds['TS'].copy().mean(dim = 'time', skipna=True)
+    try:
+        _wgs = ds['TS'].isel(time = 0).copy()
+    except:
+        _wgs = ds['TS'].copy()
     _wgs = (_wgs * 0 + 1) * gw # copy gw into the 2d array
     _wgs = _wgs / np.sum(_wgs)  # Normalize
     _wgs.name = 'cell_weight'

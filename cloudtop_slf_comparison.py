@@ -28,6 +28,7 @@ client
 import sys
 # Add common resources folder to path
 sys.path.append("/mnt/mcc-ns9600k/jonahks/git_repos/netcdf_analysis/Common/")
+sys.path.append("Common/")
 
 from imports import (
     pd, np, xr, mpl, plt, sns, os, 
@@ -61,7 +62,7 @@ else:  # Assume that we're running on a local machine and mounting NIRD
     save_dir = '~/DATAOUT/'
     save_to = os.path.expanduser(save_dir)
 
-obs_dir = 'caliop_slfs/'
+obs_dir = 'caliop_olimpia/ct_slf_olimpia'
 output_dir = 'figures/'
 case_dir = 'mnth15runs/' # inconsistent label compared to jupy_test
     
@@ -72,22 +73,16 @@ print('Can access all directory paths:', access_paths)
 
 # List case to choose one of interest
 
-all_cases = os.listdir('inp_validation/')
+all_cases = os.listdir('mnth15runs//')
 all_cases
 
 # Pick run to analyze
 
 # +
-case = '20200131_120716_singleparam_nimaxmod_wbf_1_inp_100'
-
-#run_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
-run_dir = 'inp_validation/%s' % case
-print(run_dir, os.path.exists(run_dir))
-
-# +
-case = '20200109_1541_wbf_1.0_inp_1.0'
+case = '20200220_105217_singleparam_cam61_wbf_1_inp_0.01'
 
 run_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
+#run_dir = 'inp_validation/%s' % case
 print(run_dir, os.path.exists(run_dir))
 # -
 
@@ -137,7 +132,7 @@ ct_slf_noresm = ds['CT_SLF']
 ds['CT_SLF_ISOTM_AVG'] = ds['CT_SLF'].mean(dim = 'time', skipna=True)
 
 # Load CALIOP data
-ct_slf_caliop = xr.open_dataset('caliop_cloudtop/cloudtop_slfs.nc')
+ct_slf_caliop = xr.open_dataset('%s/cloudtop_slfs.nc' % obs_dir)
 # -
 
 # Define latitude ranges of interest.
@@ -145,7 +140,7 @@ ct_slf_caliop = xr.open_dataset('caliop_cloudtop/cloudtop_slfs.nc')
 slfvars = ['cell_weight', 'gw', 'TS', 'CT_SLF','CT_SLF_ISOTM_AVG','CT_SLFXCLD_ISOTM',
            'CT_CLD_ISOTM','SLFXCLD_ISOTM','CLD_ISOTM',
            'AREI','FREQI','NUMICE','NUMICE10s','DSTFREZIMM', 'DSTFREZCNT',
-           'DSTFREZDEP'] #,'NNUCCTO', 'NNUCCCO', 'NNUDEPO', 'NIHOMOO',
+           'DSTFREZDEP', 'AWNI'] #,'NNUCCTO', 'NNUCCCO', 'NNUDEPO', 'NIHOMOO',
           # 'HOMOO','NIMIX_CNT','NIMIX_IMM','RELHUM','T','RHO_CLUBB']
 doop = ds[slfvars]
 try:

@@ -183,20 +183,29 @@ class CT_SLF_Metric(object):
         self.cases = {}
         self.time_steps = time_steps
         self.month = sel_month
+        self.colors = ['blue','green','red','orange','purple','yellow', 'pink']
+        
         try:
-            self.ct_caliop_slf = xr.open_dataset('caliop_cloudtop/cloudtop_slfs.nc')
+            self.ct_caliop_slf = xr.open_dataset('caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
         except:
-            print('Could not load cloudtop cloud CALIOP slfs from caliop_cloudtop/cloudtop_slfs.nc')
+            print('Could not load cloudtop cloud CALIOP slfs from caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
         try:
             self.bulk_caliop_slf = pd.read_csv('caliop_slfs/MPC_ISO_CALIOP_NorESM.csv')
         except: 
             print('Could not load bulk cloud CALIOP slfs from caliop_slfs/MPC_ISO_CALIOP_NorESM.csv')
-            
+        try:
+            self.incloud_caliop_slf = xr.open_dataset('caliop_olimpia/incloud_slf_olimpia/incloud_slfs.nc')
+        except: 
+            print('Could not load incloud cloud CALIOP slfs from caliop_olimpia/incloud_slf_olimpia/incloud_slfs.nc')            
 
     def set_origin(self, case): # case is a string of the case name
         if case not in self.cases: # check if it is already in the dictionary
             self.add_case(case) 
         self.origin = self.cases[case] # should have a check for the object type
+        
+        
+        
+        # calculate values and set them to variables here
         
     def add_case(self, case, path=None): # Dictionary can be overwritten, should be fine
         if path == None:
@@ -244,8 +253,15 @@ class CT_SLF_Metric(object):
         isos_plot = plt.figure(figsize=[10,10])
         plt.gca().invert_yaxis()
 
-        plt.plot(self.bulk_caliop_slf['CALIOP_70S-90S'], self.bulk_caliop_slf['Isotherm'], 
-                 color='black', label='CALIOP', linestyle='-', marker='D')
+        # use old observational data
+       # plt.plot(self.bulk_caliop_slf['CALIOP_70S-90S'], self.bulk_caliop_slf['Isotherm'], 
+        #         color='black', label='CALIOP', linestyle='-', marker='D')
+
+        caliop_weight = self.incloud_caliop_slf['cell_weight']
+        caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<70, self.incloud_caliop_slf['lat']>82)
+        caliop_slf = 100*masked_average(self.incloud_caliop_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
+        caliop_stdev = 100*np.std(self.incloud_caliop_slf['SLF'].sel(lat=slice(70,90)), axis=(0,1))
+        plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', fmt='o-', marker='D', color = 'black', zorder=0)
         
         for i in self.cases:
             _run = self.cases[i]
@@ -311,8 +327,17 @@ class CT_SLF_Metric(object):
         isos_plot = plt.figure(figsize=[10,10])
         plt.gca().invert_yaxis()
 
-        plt.plot(self.bulk_caliop_slf['CALIOP_70S-90S'], self.bulk_caliop_slf['Isotherm'], 
-                 color='black', label='CALIOP', linestyle='-',marker='o')
+#        plt.plot(self.bulk_caliop_slf['CALIOP_70S-90S'], self.bulk_caliop_slf['Isotherm'], 
+#                 color='black', label='CALIOP', linestyle='-',marker='o')
+
+        # Plot satellite phase retrievals
+        ic_caliop_weight = self.incloud_caliop_slf['cell_weight']
+        ic_caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<70, self.incloud_caliop_slf['lat']>82)
+        ic_caliop_slf = 100*masked_average(self.incloud_caliop_slf['SLF'], dim=['lat','lon'], weights=ic_caliop_weight, mask=ic_caliop_mask)
+        ic_caliop_stdev = 100*np.std(self.incloud_caliop_slf['SLF'].sel(lat=slice(70,90)), axis=(0,1))
+        plt.errorbar(ic_caliop_slf, ic_caliop_slf['isotherm'], xerr=ic_caliop_stdev, label='CALIOP SLF IC', fmt='o-', color = 'black', zorder=0)
+        
+        
         caliop_weight = self.ct_caliop_slf['cell_weight']
         caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<66.667, self.ct_caliop_slf['lat']>82)
         caliop_slf = 100*masked_average(self.ct_caliop_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
@@ -350,7 +375,8 @@ class CT_SLF_Metric(object):
                 
             weight_bulk = _case['cell_weight']
             slf_bulk = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon', 'time'], weights=weight_bulk, mask=mask)
-            err = np.array(slf_bulk)[::2][:-1] - np.array(self.bulk_caliop_slf['CALIOP_70S-90S'][:-1])
+            err = np.array(slf_bulk) - np.array(ic_caliop_slf)       
+#            err = np.array(slf_bulk)[::2][:-1] - np.array(self.bulk_caliop_slf['CALIOP_70S-90S'][:-1])
             rms_bulk = np.sqrt(np.mean(np.square(err)))
             
             plt.scatter(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color)
@@ -370,24 +396,57 @@ class CT_SLF_Metric(object):
         '''
         
         test_plot = plt.figure(figsize=[10,10])
-
+        colors = ['blue','green','red','orange','purple','yellow', 'pink']
+        
         test_plot.gca().invert_yaxis()
-        for _casename in self.cases:
-            _da = self.cases[_casename].case_da
-            print(_da.variables)
+        for _casename, _col in zip(self.cases, colors):
+            _case = self.cases[_casename]
+            _da = _case.case_da
+#            print(_da.variables)
+            weight = _da['cell_weight']
             working_da = _da[var_str].sel(lat=slice(70,90)) # select variable and lat range
             working_da = working_da.mean(dim='time') # select time or average by it
-            weight = working_da['cell_weight']
+#            weight = working_da['cell_weight']
             avg_var = masked_average(working_da, dim=['lat','lon'],weights=weight) # finally actually compute on the bounded variable of interest
-            plt.plot(avg_var, avg_var['lev'], label=_case.label)#, color=color)
-
-        xaxis_label = '%s (%s)' % (avg_var.long_name, avg_var.units)
+            plt.plot(avg_var, avg_var['lev'], label=_case.label + " " + _case.date, color=_col)
+        
+#        return _da
+        xaxis_label = '%s (%s)' % (var_str, _da[var_str].units)
 
         plt.legend(loc='upper right')
-        test_plot.suptitle(avg_var.long_name, fontsize=24)
+        test_plot.suptitle(_da[var_str].long_name, fontsize=24)
         plt.xlabel(xaxis_label); plt.ylabel('Hybrid Sigma pressure (hPa)');
 
         return test_plot
+
+    def plot_var_ratio(self, num_var, denom_var):
+        '''
+        Plot the ratio of two variables. This could be somehow combined with plot_single_var
+        '''
+        
+        test_plot = plt.figure(figsize=[10,10])
+        colors = ['blue','green','red','orange','purple','yellow', 'pink']
+        
+        test_plot.gca().invert_yaxis()
+        for _casename, _col in zip(self.cases, colors):
+            _case = self.cases[_casename]
+            _da = _case.case_da
+#            print(_da.variables)
+            weight = _da['cell_weight']
+            working_da = (_da[num_var] / _da[denom_var]).sel(lat=slice(70,90)) # select variable and lat range
+            working_da = working_da.mean(dim='time') # select time or average by it
+            avg_var = masked_average(working_da, dim=['lat','lon'],weights=weight) # finally actually compute on the bounded variable of interest
+            plt.plot(avg_var, avg_var['lev'], label=_case.label + " " + _case.date, color=_col)
+        
+#        return _da
+        xaxis_label = '%s / %s' % (num_var, denom_var) # units issue here
+
+        plt.legend(loc='upper right')
+        test_plot.suptitle(_da[num_var].long_name, fontsize=24)
+        plt.xlabel(xaxis_label, fontsize=16); plt.ylabel('Hybrid Sigma pressure (hPa)', fontsize=16);
+
+        return test_plot
+    
     
     def plot_parameterspace(self):
         parameterspace_plot = plt.figure(figsize=[10,10])       
@@ -416,7 +475,105 @@ class CT_SLF_Metric(object):
 #        plt.legend()
         
         return parameterspace_plot
-    
+
+    def dual_parameterspace(self):
+        parameterspace_plot = plt.figure(figsize=[10,10])       
+        
+        # Satellite values
+        ic_caliop_weight = self.incloud_caliop_slf['cell_weight']
+        ic_caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<70, self.incloud_caliop_slf['lat']>82)
+        ic_caliop_slf = 100*masked_average(self.incloud_caliop_slf['SLF'], dim=['lat','lon'], weights=ic_caliop_weight, mask=ic_caliop_mask)
+        
+        caliop_weight = self.ct_caliop_slf['cell_weight']
+        caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<66.667, self.ct_caliop_slf['lat']>82)
+        caliop_slf = 100*masked_average(self.ct_caliop_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
+        
+        for i, color in zip(self.cases, self.colors):
+            _run = self.cases[i]
+            _case = _run.case_da
+            
+            _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
+            # this order of things must be thought about.
+            weight = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this weighting
+            mask = np.bitwise_or(_case['lat']<70, _case['lat']>82)
+            slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon'], weights=weight, mask=mask)
+            
+            _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM'])
+            slf_bulk = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon', 'time'], weights=weight, mask=mask)
+
+            # Calculate errors
+            err_ic = np.mean(np.array(slf_bulk) - np.array(ic_caliop_slf))
+            err_ct = np.mean(np.array(slf_ct) - np.array(caliop_slf))
+            
+            change_ic = np.mean(np.array(slf_ct) - np.array(caliop_slf))
+            change_ct = np.mean(np.array(slf_ct) - np.array(caliop_slf))
+            
+            print(err_ic, err_ct)
+            
+            plt.plot(err_ic, err_ct, marker='o', color=color, label=_run.label)
+        
+        plt.ylabel('Avg. Error in Cloudtop SLF')
+        plt.xlabel('Avg. Error in In-Cloud SLF')
+        plt.grid(True)
+        plt.legend()
+
+    def parameterspace_change(self):
+        parameterspace_plot = plt.figure(figsize=[10,10])       
+        
+        # Satellite values
+        ic_caliop_weight = self.incloud_caliop_slf['cell_weight']
+        ic_caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<70, self.incloud_caliop_slf['lat']>82)
+        ic_caliop_slf = 100*masked_average(self.incloud_caliop_slf['SLF'], dim=['lat','lon'], weights=ic_caliop_weight, mask=ic_caliop_mask)
+        
+        caliop_weight = self.ct_caliop_slf['cell_weight']
+        caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<66.667, self.ct_caliop_slf['lat']>82)
+        caliop_slf = 100*masked_average(self.ct_caliop_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
+        
+        oo = self.origin
+        o_bulkslf, o_ctslf = self.arctic_slf(oo)
+        
+        #err_ic = np.mean(np.array(_bulkslf) - np.array(ic_caliop_slf))
+        #err_ct = np.mean(np.array(_ctslf) - np.array(caliop_slf))
+        
+        for i, color in zip(self.cases, self.colors):
+            _run = self.cases[i]
+            
+            _bulkslf, _ctslf = self.arctic_slf(_run)
+
+            # Calculate errors
+            #err_ic = np.mean(np.array(_bulkslf) - np.array(ic_caliop_slf))
+            #err_ct = np.mean(np.array(_ctslf) - np.array(caliop_slf))
+            
+            change_ic = np.mean(np.array(_bulkslf) - np.array(o_bulkslf))
+            change_ct = np.mean(np.array(_ctslf) - np.array(o_ctslf))
+            
+            #print(err_ic, err_ct)
+            
+            plt.plot(change_ic, change_ct, marker='o', color=color, label=_run.label)
+        
+        plt.ylabel('Avg. Change in Cloudtop SLF')
+        plt.xlabel('Avg. Change in In-Cloud SLF')
+        plt.grid(True)
+        plt.legend()
+        
+        
+    def arctic_slf(self, case):
+        '''
+        Function for use within the class to calculate SLF values in the CALIOP Arctic. Returns SLF by isotherm for both metrics.
+        '''
+        _case = case.case_da
+            
+        _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
+        # this order of things must be thought about.
+        weight = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this weighting
+        mask = np.bitwise_or(_case['lat']<70, _case['lat']>82)
+        slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon'], weights=weight, mask=mask)
+            
+        _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM'])
+        slf_bulk = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon', 'time'], weights=weight, mask=mask)
+        
+        return slf_bulk, slf_ct
+        
 class CT_SLF_case:
     
     def __init__(self, casedir, case, timesteps, months):
@@ -433,9 +590,11 @@ class CT_SLF_case:
         self.label = 'WBF: %.3f INP: %.3f' % (self.wbf_mult, self.inp_mult)
         
     def add_ds(self):
-        strg = '%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case)
-        print(strg)
-        _ds = xr.open_dataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case))
+        try:
+            _ds = xr.open_dataset('%s%s/%s.nc' % (self.case_dir, self.case, self.case))
+        except:
+            print('Loading abridged dataset "slfvars" for %s.' % self.case)
+            _ds = xr.open_dataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case))
         # Do I only want to use this processed file? Probably variable-wise.
 #        _ds = xr.open_mfdataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case), combine='by_coords')
 
@@ -450,8 +609,9 @@ class CT_SLF_case:
             try:
                 ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))
             except:
-                ds = _ds.sel(time=slice('2000-04-01', '2001-03-01'))
-        #        ds = _ds.isel(time=slice(3,15))
+                ds = _ds.sel(time=slice('2000-04-01', '2001-03-01'))                
+        else: ds = _ds
+            
         ds = add_weights(ds) # still has time here
 
         ds['CT_SLF'] = ds['CT_SLFXCLD_ISOTM']/ds['CT_CLD_ISOTM']
@@ -462,15 +622,10 @@ class CT_SLF_case:
         
     def month_check(self, month_data):
         _bools = []
-#        print(month_data)
- #       print("Months wanted: %s" % self.months)
         for i in month_data:
-  #          print(i.values)
             try:
-#                print(i. values in self.months)
                 _bools.append(i in self.months)
                 
             except: pass
-#        print(_bools)
         
         return _bools
