@@ -356,7 +356,7 @@ class CT_SLF_Metric(object):
             # this order of things must be thought about.
             weight_ct = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this weighting
             mask = np.bitwise_or(_case['lat']<70, _case['lat']>82)
-            slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon'], weights=weight_ct, mask=mask)
+            slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon'], weights=weight_ct, mask=mask) # error here related to having 'time' or not
             err = np.array(slf_ct) - np.array(caliop_slf)
             rms_ct = np.sqrt(np.mean(np.square(err)))
 
@@ -512,6 +512,7 @@ class CT_SLF_Metric(object):
             
             plt.plot(err_ic, err_ct, marker='o', color=color, label=_run.label)
         
+        plt.scatter(0,0,marker=(5, 1), color='gold',label='Goal',s=200)
         plt.ylabel('Avg. Error in Cloudtop SLF')
         plt.xlabel('Avg. Error in In-Cloud SLF')
         plt.grid(True)
@@ -580,7 +581,7 @@ class CT_SLF_case:
         self.case_dir = casedir # General directory where all cases are stored
         self.case = case # The origin case name (wbf = 1, slf = 1)
         self.time_steps = timesteps
-        self.months = np.array(months)
+        self.months = np.array(months) # How does this work?
         
         self.add_ds()
         
@@ -590,11 +591,22 @@ class CT_SLF_case:
         self.label = 'WBF: %.3f INP: %.3f' % (self.wbf_mult, self.inp_mult)
         
     def add_ds(self):
+    # create list of appropriate files
         try:
+            print('Trying to load concatenated file for %s' % self.case)
             _ds = xr.open_dataset('%s%s/%s.nc' % (self.case_dir, self.case, self.case))
         except:
-            print('Loading abridged dataset "slfvars" for %s.' % self.case)
-            _ds = xr.open_dataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case))
+            print('Failed, creating mfdataset.')
+            self.geth0s()
+            _ds = xr.open_mfdataset(self.files)#, combine='by_coords') #, chunks={'lat':10}) #chunk?
+            
+          #  print('Could not load from output files.')
+                
+#         try:
+#             _ds = xr.open_dataset('%s%s/%s.nc' % (self.case_dir, self.case, self.case))
+#         except:
+#             print('Loading abridged dataset "slfvars" for %s.' % self.case)
+#             _ds = xr.open_dataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case))
         # Do I only want to use this processed file? Probably variable-wise.
 #        _ds = xr.open_mfdataset('%s%s/%s_slfvars.nc' % (self.case_dir, self.case, self.case), combine='by_coords')
 
@@ -602,14 +614,15 @@ class CT_SLF_case:
             print("Just taking the first %s timesteps" % self.time_steps)
             ds = _ds.isel(time=slice(0,self.time_steps))
         
-        elif self.months != None:  # select the desired months
+        elif self.months != None:  # select the desired months, 2 would mean all Februarys
             ds = _ds.sel(time=self.month_check(_ds['time.month']))
         
-        elif (len(_ds['time']) > 1):
-            try:
-                ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))
-            except:
-                ds = _ds.sel(time=slice('2000-04-01', '2001-03-01'))                
+        elif (len(_ds['time']) > 1): # get everything after a 3-month wind-up
+            ds = _ds.sel(time=slice(_ds['time'][3],_ds['time'][-1]))
+#            try:
+#                ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))
+#            except:
+#                ds = _ds.sel(time=slice('2000-04-01', '2001-03-01'))                
         else: ds = _ds
             
         ds = add_weights(ds) # still has time here
@@ -629,3 +642,9 @@ class CT_SLF_case:
             except: pass
         
         return _bools
+    
+    def geth0s(self):
+        prepath = '%s%s/atm/hist/' % (self.case_dir, self.case)
+        allfiles = os.listdir(prepath)
+        self.files = [prepath + i for i in allfiles if "h0" in i]
+        

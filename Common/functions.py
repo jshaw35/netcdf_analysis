@@ -210,7 +210,7 @@ def add_weights(ds):
     try:
         _wgs = ds['TS'].isel(time = 0).copy()
     except:
-        _wgs = ds['TS'].copy()
+        _wgs = ds['TS'].copy() # this is throwing an error
     _wgs = (_wgs * 0 + 1) * gw # copy gw into the 2d array
     _wgs = _wgs / np.sum(_wgs)  # Normalize
     _wgs.name = 'cell_weight'
