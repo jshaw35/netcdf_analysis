@@ -432,9 +432,13 @@ class CT_SLF_case:
         self.add_ds()
         
         _temp_parsed = self.case.split('_') # Parse string to get model parameters
-        self.date, self.time, self.paramfile = _temp_parsed[:3]
-        self.wbf_mult = np.float(_temp_parsed[-3]); self.inp_mult = np.float(_temp_parsed[-1])
-        self.label = 'WBF: %.3f INP: %.3f' % (self.wbf_mult, self.inp_mult)
+        try:
+            self.date, self.time, self.paramfile = _temp_parsed[:3]
+            self.wbf_mult = np.float(_temp_parsed[-3]); self.inp_mult = np.float(_temp_parsed[-1])
+            self.label = 'WBF: %.3f INP: %.3f' % (self.wbf_mult, self.inp_mult)
+        except: # Handle non-standard case name formats
+            self.label = self.case
+            self.date, self.time, self.paramfile, self.wbf_mult, self.inp_mult = ['None','None','None','None','None']
         
     def add_ds(self):
     # create list of appropriate files
@@ -463,8 +467,9 @@ class CT_SLF_case:
         elif self.months != None:  # select the desired months, 2 would mean all Februarys
             ds = _ds.sel(time=self.month_check(_ds['time.month']))
         
-        elif (len(_ds['time']) > 1): # get everything after a 3-month wind-up
-            ds = _ds.sel(time=slice(_ds['time'][3],_ds['time'][-1]))
+        elif (len(_ds['time']) > 12): # pick wind-up so months are equally weighted 20200428
+            fake_windup = len(_ds['time']) % 12
+            ds = _ds.sel(time=slice(_ds['time'][fake_windup],_ds['time'][-1]))
 #            try:
 #                ds = _ds.sel(time=slice('0001-04-01', '0002-03-01'))
 #            except:
@@ -647,7 +652,7 @@ class SatComp_Metric(object):
     def get_cases(self):
         return self.cases
     
-    def plot1D(self, var, layers=False, seasonal=False,season=None, bias=False):
+    def plot1D(self, var, layers=False, seasonal=False,season=None, bias=False, lat_range=None):
         '''
         General line plot function averaging over longitudes.
         '''
@@ -668,36 +673,41 @@ class SatComp_Metric(object):
                 %s ''' % (var, str(list(self.layer_prefixes.keys()))))
                 return None
             if seasonal:
-                return self.__seasonallayers1Dplotwrapper(varlist, bias=bias)
+                return self.__seasonallayers1Dplotwrapper(varlist, bias=bias,
+                                                          lat_range=lat_range)
             else:    
-                return self.__layers1Dplotwrapper(varlist, bias=bias)
+                return self.__layers1Dplotwrapper(varlist, bias=bias, 
+                                                  lat_range=lat_range)
         if seasonal:
-            return self.__seasonal1Dplotwrapper(var, bias=bias)
+            return self.__seasonal1Dplotwrapper(var, bias=bias, 
+                                                lat_range=lat_range)
         else:
-            return self.__standard1Dplotwrapper(var, bias=bias)
+            return self.__standard1Dplotwrapper(var, bias=bias, 
+                                                lat_range=lat_range)
         
 #         self.standard1Dplot(var, self.goccp_data)
 
-    def __standard1Dplotwrapper(self, var, bias=False, **kwargs):
+    def __standard1Dplotwrapper(self, var, bias=False, lat_range=None, **kwargs):
         '''Plot variable against latitude for observations and loaded model runs.'''
         
         # Using plt.subplots only for consistency here.
         fig, axes = plt.subplots(nrows=1,ncols=1,figsize=[6,4])
         if not bias:
-            self.__standard1Dplot(var, self.goccp_data, axes, label='GOCCP')
+            self.__standard1Dplot(var, self.goccp_data, axes, 
+                                  lat_range=lat_range, label='GOCCP')
         
         for k in self.cases:
             _run = self.cases[k]
             _da = _run.case_da
             
             # Works with percents only
-            self.__standard1Dplot(var, _da, axes, bias=bias, label=_run.label)
+            self.__standard1Dplot(var, _da, axes, bias=bias, lat_range=lat_range, label=_run.label)
             
         fig.legend()
         
         return fig
 
-    def __layers1Dplotwrapper(self, varlist, bias=False, **kwargs):
+    def __layers1Dplotwrapper(self, varlist, bias=False, lat_range=None, **kwargs):
         '''Plot variable against latitude for observations and loaded model runs.'''
 
         fig, axes = plt.subplots(nrows=len(varlist),ncols=1,figsize=[10,2*len(varlist)])
@@ -705,22 +715,26 @@ class SatComp_Metric(object):
                 
         for var,ax in zip(varlist,axes):
             if not bias:
-                self.__standard1Dplot(var, self.goccp_data,ax,bias=False, label='GOCCP')
+                self.__standard1Dplot(var, self.goccp_data,ax,bias=False,
+                                      lat_range=lat_range, label='GOCCP')
             
             for k in self.cases:
                 _run = self.cases[k]
                 _da = _run.case_da
-                self.__standard1Dplot(var, _da,ax,bias=bias,label=_run.label)
+                self.__standard1Dplot(var, _da, ax, bias=bias,
+                                      lat_range=lat_range,label=_run.label)
         
         fig.legend(labels=labels)
         
         xlabels = varlist; xax = axes
         self.add_labels(xlabels=xlabels, xaxes=xax)
         self.share_ylims(axes)
-            
+        
+        fig.subplots_adjust(hspace=0.5)
+        
         return fig
         
-    def __seasonal1Dplotwrapper(self, var, bias=False, **kwargs):
+    def __seasonal1Dplotwrapper(self, var, bias=False, lat_range=None, **kwargs):
         '''Plot variable against latitude for observations and loaded model runs.'''
 
         fig, axes = plt.subplots(nrows=1,ncols=4,figsize=[15,4])
@@ -729,9 +743,10 @@ class SatComp_Metric(object):
             labels = self.case_labels
         else:
             labels = ['GOCCP'] + self.case_labels
-            _season_da = season_mean(self.goccp_data[var])
+            _season_da = season_mean(self.goccp_data[var]).where(np.absolute(self.goccp_data['lat'])<82)
             for seas,ax in zip(_season_da,axes):
-                self.__standard1Dplot(var, seas.to_dataset(name=var),ax,bias=False)
+                self.__standard1Dplot(var, seas.to_dataset(name=var),ax,
+                                      bias=False, lat_range=lat_range)
             
         # Iterate cases first, and then seasons within that
         for k in self.cases:
@@ -741,7 +756,7 @@ class SatComp_Metric(object):
             _season_da = season_mean(_da[var])
             for seas,ax in zip(_season_da,axes):
                 self.__standard1Dplot(var, seas.to_dataset(name=var),ax,
-                                      bias=bias,label=_run.label)
+                                      bias=bias,lat_range=lat_range, label=_run.label)
         
         fig.legend(labels=labels)
         
@@ -752,7 +767,7 @@ class SatComp_Metric(object):
 
         return fig
 
-    def __seasonallayers1Dplotwrapper(self, varlist, bias=False, **kwargs):
+    def __seasonallayers1Dplotwrapper(self, varlist, bias=False, lat_range=None, **kwargs):
         '''Plot variables by season against latitude for observations and loaded model
         runs.'''
 
@@ -765,11 +780,11 @@ class SatComp_Metric(object):
                 labels = self.case_labels
             else:
                 labels = ['GOCCP'] + self.case_labels
-                _season_da = season_mean(self.goccp_data[var])
+                _season_da = season_mean(self.goccp_data[var]).where(np.absolute(self.goccp_data['lat'])<82)
 
                 for seas,ax in zip(_season_da,xax): #iterate over columns (seasons)
                     self.__standard1Dplot(var, seas.to_dataset(name=var),ax,
-                                          bias=False,label='GOCCP')
+                                          bias=False, lat_range=lat_range, label='GOCCP')
             
             for k in self.cases:
                 _run = self.cases[k]
@@ -778,7 +793,7 @@ class SatComp_Metric(object):
                 
                 for seas,ax in zip(_season_da,xax): #iterate over columns (seasons)
                     self.__standard1Dplot(var, seas.to_dataset(name=var),ax,
-                                      bias=bias,label=_run.label)
+                                      bias=bias, lat_range=lat_range, label=_run.label)
                     
             self.share_ylims(xax) # Share ylims only across layers
         
@@ -787,32 +802,39 @@ class SatComp_Metric(object):
         ylabels = varlist; yax = axes[:,0]
         xlabels = _season_da.coords['season'].values; xax = axes[0,:]
         self.add_labels(xlabels=xlabels, xaxes=xax, ylabels=ylabels, yaxes=yax)
-#         self.share_ylims(axes)
         
         return fig
         
-    def __standard1Dplot(self, var, da, ax, bias=False, **kwargs):
+    def __standard1Dplot(self, var, da, ax, bias=False, lat_range=None, **kwargs):
         '''
         Simple 1D plotting function. Need to build in better labels+bias.'''
-#         val = da[var].mean(dim = ['time','lon'], skipna=True)
-#         val.plot(ax=ax, **kwargs)
-        
+
+        lat_lims = [-90,90]
+        if lat_range:
+            lat_lims = lat_range
+        if (bias and lat_lims[0] < -82): lat_lims[0] = -82
+        if (bias and lat_lims[1] > 82): lat_lims[1] = 82
+            
         if 'time' not in da.dims: # catches a bug with seasonal averages
-            with np.errstate(divide='ignore',invalid='ignore'):
-                val = da[var].mean(dim='lon')
+            val = da[var].mean(dim='lon', skipna=True)
         else:
-            with np.errstate(divide='ignore',invalid='ignore'):
-                val = da[var].mean(dim = ['time','lon'], skipna=True)
+            val = da[var].mean(dim = ['time','lon'], skipna=True)
 
         if bias:
-            with np.errstate(divide='ignore',invalid='ignore'):
+            try: # get season observations if passed da is seasonally processed
+                season = val['season'].values
+                obs_period = season_mean(self.goccp_data[var]).sel(season=season).where(np.absolute(self.goccp_data['lat'])<82)
+                obs = obs_period.mean(dim = ['lon'], skipna=True)
+            except:
                 obs = self.goccp_data[var].mean(dim = ['time','lon'], skipna=True)
+            
+            val = val.interp_like(obs) # quick interp fix for weird grid mismatch (bad?)
             val = val - obs
 
-            im = val.plot(ax=ax, add_legend=False, **kwargs)
-            
+            im = val.sel(lat=slice(lat_lims[0],lat_lims[1])).plot(ax=ax, add_legend=False, **kwargs)
+            ax.hlines(0, lat_lims[0], lat_lims[1], colors='gray', linestyles='dashed', label='')
         else:
-            im = val.plot(ax=ax, add_legend=False, **kwargs)
+            im = val.sel(lat=slice(lat_lims[0],lat_lims[1])).plot(ax=ax, add_legend=False, **kwargs)
             
         ax.set_ylabel('')
         ax.set_xlabel('')
@@ -850,11 +872,16 @@ class SatComp_Metric(object):
                 print('''Layers prefix %s not found. Select from: \n
                 %s ''' % (var, str(list(self.layer_prefixes.keys()))))
                 return None
-            return self.__layersplotwrapper(varlist, proj, bias=bias)
+            out = self.__layersplotwrapper(varlist, proj, bias=bias)
         if seasonal:
-            return self.__seasonalplotwrapper(var, proj, bias=bias)
+            out = self.__seasonalplotwrapper(var, proj, bias=bias)
         else:
-            return self.__standard2Dplotwrapper(var, proj, bias=bias)
+            out = self.__standard2Dplotwrapper(var, proj, bias=bias)
+        
+        self.share_ylims(out.get_axes()) # jshaw to-do, unsure
+#         out.colorbar(_im, ax=out.get_axes().ravel().tolist())
+        
+        return out
         
     def __standard2Dplotwrapper(self, var, projection, bias=False, **kwargs):
         '''
@@ -883,7 +910,7 @@ class SatComp_Metric(object):
             _ax, _im = self.standard2Dplot(var,_da, ax,projection=projection,
                                            bias=bias)#, vmin=0, vmax=100)
                 
-        fig.colorbar(_im, ax=axes.ravel().tolist())
+#         fig.colorbar(_im, ax=axes.ravel().tolist())
         
         yax = axes
         xlabels = [var]; xax = [axes[0]]
@@ -953,7 +980,7 @@ class SatComp_Metric(object):
                            projection=projection, figsize=[15,2*(len(self.cases)+1)])
             ylabels = ['GOCCP'] + self.case_labels
             
-            _season_da = season_mean(self.goccp_data[var])
+            _season_da = season_mean(self.goccp_data[var]).where(np.absolute(self.goccp_data['lat'])<82)
 
             for seas,ax in zip(_season_da,axes[0]):
                 _ax, _im = self.standard2Dplot(var, seas.to_dataset(name=var), ax,
@@ -991,12 +1018,17 @@ class SatComp_Metric(object):
         if 'time' not in da.dims: # catches a bug with seasonal averages
             val = da[var].where(da['lat'] > lat_lims[0])
         else:
-            with np.errstate(divide='ignore',invalid='ignore'):
-                val = da[var].mean(dim = 'time', skipna=True).where(
+            val = da[var].mean(dim = 'time', skipna=True).where(
                                 da['lat'] > lat_lims[0])
         
         if bias:
-            with np.errstate(divide='ignore',invalid='ignore'):
+            try: # get season observations if passed da is seasonally processed
+                print('Seasonalizing GOCCP data.')
+                season = val['season'].values
+                obs = season_mean(self.goccp_data[var]).sel(season=season).where(
+                                  da['lat'] > lat_lims[0]).where(np.absolute(self.goccp_data['lat'])<82).plot()
+
+            except:
                 obs = self.goccp_data[var].mean(dim = 'time', skipna=True).where(
                                                 da['lat'] > lat_lims[0])
             val = val - obs
@@ -1015,7 +1047,7 @@ class SatComp_Metric(object):
             for ax,label in zip(xaxes,xlabels):
                 ax.text(0.5, 1.1, label, va='bottom', ha='center',
                     rotation='horizontal', rotation_mode='anchor',
-                    transform=ax.transAxes, fontsize=18)
+                    transform=ax.transAxes, fontsize=15)
         except: pass
 
         try:
@@ -1055,10 +1087,15 @@ class SatComp_case:
         self.add_ds()
         
         # Parse name to retrieve encoded values (dislike)
-        _temp_parsed = self.case.split('_') # Parse string to get model parameters
-        self.date, self.time, self.paramfile = _temp_parsed[:3]
-        self.wbf_mult = np.float(_temp_parsed[-3]); self.inp_mult = np.float(_temp_parsed[-1])
-        self.label = 'WBF: %.3f INP: %.3f' % (self.wbf_mult, self.inp_mult)
+        try:
+            _temp_parsed = self.case.split('_') # Parse string to get model parameters
+            self.date, self.time, self.paramfile = _temp_parsed[:3]
+            self.wbf_mult = np.float(_temp_parsed[-3]); self.inp_mult = np.float(_temp_parsed[-1])
+            self.label = 'WBF: %.3f INP: %.3f' % (self.wbf_mult, self.inp_mult)
+        
+        except: # Handle non-standard case name formats
+            self.label = self.case
+            self.date, self.time, self.paramfile, self.wbf_mult, self.inp_mult = ['None','None','None','None','None']
         
     def add_ds(self):
         try:
@@ -1069,7 +1106,7 @@ class SatComp_case:
             self.geth0s() # create list of appropriate output files self.files
             _ds = xr.open_mfdataset(self.files)#, combine='by_coords') #, chunks={'lat':10}) #chunk?
             
-        ds = _ds.sel(time=slice('2009-06-01', '2013-06-01')) # gets all 48 files
+        ds = _ds.sel(time=slice('2009-06-01', '2013-05-01')) # gets all 48 files
             
         ds = add_weights(ds)
         

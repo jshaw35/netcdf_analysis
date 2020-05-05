@@ -313,6 +313,7 @@ def regress_1d(xdata, ydata):
     return regressor
 
 # Weighting function from http://xarray.pydata.org/en/stable/examples/monthly-means.html
+# Does not handle NaNs
 def season_mean(ds, calendar='standard'):
     # Make a DataArray of season/year groups
     year_season = xr.DataArray(ds.time.to_index().to_period(freq='Q-NOV').to_timestamp(how='E'),
@@ -328,7 +329,7 @@ def season_mean(ds, calendar='standard'):
     np.testing.assert_allclose(weights.groupby('time.season').sum().values, np.ones(4))
 
     # Calculate the weighted average
-    return (ds * weights).groupby('time.season').sum(dim='time')
+    return (ds * weights).groupby('time.season').sum(dim='time') # does not handle NaNs because of this.
 
 def leap_year(year, calendar='standard'):
     """Determine if year is a leap year"""
