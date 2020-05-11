@@ -203,19 +203,28 @@ def plot_slf_isotherms(ds, var=None, isovar=None):
 def add_weights(ds):
     '''
     Add variable to ds for weighting of lat,lon variables
+    Update to only require existing "lat" and "lon" variables. 
     '''
-    gw = ds['gw']    
+    
+    lat = ds['lat']
+    lon = ds['lon']
+    
+    _ones = xr.ones_like(lon)
+    _gw = np.cos(lat*np.pi/180)
+    ds['cell_weight'] = (_gw @ _ones) / _gw.sum()
+    
+#     gw = ds['gw']    
 
-#    _wgs = ds['TS'].copy().mean(dim = 'time', skipna=True)
-    try:
-        _wgs = ds['TS'].isel(time = 0).copy()
-    except:
-        _wgs = ds['TS'].copy() # this is throwing an error
-    _wgs = (_wgs * 0 + 1) * gw # copy gw into the 2d array
-    _wgs = _wgs / np.sum(_wgs)  # Normalize
-    _wgs.name = 'cell_weight'
+# #    _wgs = ds['TS'].copy().mean(dim = 'time', skipna=True)
+#     try:
+#         _wgs = ds['TS'].isel(time = 0).copy()
+#     except:
+#         _wgs = ds['TS'].copy() # this is throwing an error
+#     _wgs = (_wgs * 0 + 1) * gw # copy gw into the 2d array
+#     _wgs = _wgs / np.sum(_wgs)  # Normalize
+#     _wgs.name = 'cell_weight'
 
-    ds['cell_weight'] = _wgs
+#     ds['cell_weight'] = _wgs
     
     return ds
 

@@ -178,9 +178,9 @@ class CT_SLF_Metric(object):
 
         # Plot satellite phase retrievals
         ic_caliop_weight = self.incloud_caliop_slf['cell_weight']
-        ic_caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<70, self.incloud_caliop_slf['lat']>82)
+        ic_caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<66.667, self.incloud_caliop_slf['lat']>82)
         ic_caliop_slf = 100*masked_average(self.incloud_caliop_slf['SLF'], dim=['lat','lon'], weights=ic_caliop_weight, mask=ic_caliop_mask)
-        ic_caliop_stdev = 100*np.std(self.incloud_caliop_slf['SLF'].sel(lat=slice(70,90)), axis=(0,1))
+        ic_caliop_stdev = 100*np.std(self.incloud_caliop_slf['SLF'].sel(lat=slice(66.667,90)), axis=(0,1))
         plt.errorbar(ic_caliop_slf, ic_caliop_slf['isotherm'], xerr=ic_caliop_stdev, label='CALIOP SLF IC', fmt='o-', color = 'black', zorder=0)
         
         
@@ -201,7 +201,7 @@ class CT_SLF_Metric(object):
             _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
             # this order of things must be thought about.
             weight_ct = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this weighting
-            mask = np.bitwise_or(_case['lat']<70, _case['lat']>82)
+            mask = np.bitwise_or(_case['lat']<66.667, _case['lat']>82)
             slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon'], weights=weight_ct, mask=mask) # error here related to having 'time' or not
             err = np.array(slf_ct) - np.array(caliop_slf)
             rms_ct = np.sqrt(np.mean(np.square(err)))
@@ -236,7 +236,7 @@ class CT_SLF_Metric(object):
         
         return isos_plot
     
-    def plot_single_var(self, var_str):
+    def plot_single_var(self, var_str, lat_range=[66.667,90]):
         '''
         Plot a single variable against 'lev' for loaded cases. Argument is the variable string name.
         '''
@@ -250,7 +250,7 @@ class CT_SLF_Metric(object):
             _da = _case.case_da
 #            print(_da.variables)
             weight = _da['cell_weight']
-            working_da = _da[var_str].sel(lat=slice(70,90)) # select variable and lat range
+            working_da = _da[var_str].sel(lat=slice(lat_range[0],lat_range[1])) # select variable and lat range
             working_da = working_da.mean(dim='time') # select time or average by it
 #            weight = working_da['cell_weight']
             avg_var = masked_average(working_da, dim=['lat','lon'],weights=weight) # finally actually compute on the bounded variable of interest
@@ -265,7 +265,7 @@ class CT_SLF_Metric(object):
 
         return test_plot
 
-    def plot_var_ratio(self, num_var, denom_var):
+    def plot_var_ratio(self, num_var, denom_var, Arctic=True, lat_range=[66.667,90]):
         '''
         Plot the ratio of two variables. This could be somehow combined with plot_single_var
         '''
@@ -279,7 +279,8 @@ class CT_SLF_Metric(object):
             _da = _case.case_da
 #            print(_da.variables)
             weight = _da['cell_weight']
-            working_da = (_da[num_var] / _da[denom_var]).sel(lat=slice(70,90)) # select variable and lat range
+            working_da = (_da[num_var] / _da[denom_var]).sel(lat=slice(lat_range[0],
+                                                                       lat_range[1])) # select variable and lat range
             working_da = working_da.mean(dim='time') # select time or average by it
             avg_var = masked_average(working_da, dim=['lat','lon'],weights=weight) # finally actually compute on the bounded variable of interest
             plt.plot(avg_var, avg_var['lev'], label=_case.label + " " + _case.date, color=_col)
@@ -538,6 +539,7 @@ class SatComp_Metric(object):
                 
             except:
                 print('ERROR: Could not load GOCCP data.')
+                print("Error: ", sys.exc_info())
                 return None
             
             
@@ -564,7 +566,7 @@ class SatComp_Metric(object):
                                          'CLDHGH_CAL_ICE','CLDTOT_CAL_ICE']}
         self.seasons = ['MAM','JJA','SON','DJF']
         self.projdict = {'PlateCarree':ccrs.PlateCarree(),'Arctic':ccrs.NorthPolarStereo(),
-                         'Mollweide':ccrs.Mollweide()}
+                         'Mollweide':ccrs.Mollweide(), "Antarctic":ccrs.SouthPolarStereo()}
         # Dictionary with GOCCP variables as keys and COSP variables as values: (clccalipso not in COSP?)
         self.name_dict = {
                      'cllcalipso_liq':'CLDLOW_CAL_LIQ','clmcalipso_liq':'CLDMED_CAL_LIQ',
@@ -576,7 +578,10 @@ class SatComp_Metric(object):
                      'cllcalipso_un':'CLDLOW_CAL_UN','clmcalipso_un':'CLDMED_CAL_UN',
                      'clhcalipso_un':'CLDHGH_CAL_UN','cltcalipso_un':'CLDTOT_CAL_UN'
                     }
-#{'latitude':'lat','longitude':'lon',
+        self.lat_bounds = [[-82,-70],[-70,-60],[-60,-50],[-50,-40],[-40,-30],
+              [-30,-20],[-20,-10],[-10,0],[0,10],[10,20],[20,30],
+              [30,40],[40,50],[50,60],[60,70],[70,82]]
+        
     def load_GOCCP_data(self): # should this be private '__'
         '''
         Load GOCCP data for model comparison. Relabel variables to match model output.
@@ -628,7 +633,10 @@ class SatComp_Metric(object):
 
         for i in goccp_vars: #think maybe: with xr.set_options(keep_attrs=True)
             _goccp_data[i] = 100*_goccp_data[i]
-        
+            
+        # Quickly add a variable to generate weights
+        _goccp_data = add_weights(_goccp_data)
+
         # Rename variables so they will match COSP names and index correctly
         self.goccp_data = _goccp_data.rename(self.name_dict)
                 
@@ -845,7 +853,7 @@ class SatComp_Metric(object):
         '''
         General surface plot function. Calls more specific plotting functions.
         Supports projections:
-        PlateCarree, NorthPolarStereo, Mollweide
+        PlateCarree, NorthPolarStereo, Mollweide, SouthPolarStereo
         '''
                 
         # Series of comparison to select specific plotting function to use:
@@ -858,6 +866,7 @@ class SatComp_Metric(object):
             return None            
         if projection not in self.projdict:
             print('Did not recognize projection string.')
+            print('Please select from: %s' % self.projdict.keys())
             return None            
         else: proj = self.projdict[projection]
         if (season and season not in self.seasons):
@@ -873,7 +882,7 @@ class SatComp_Metric(object):
                 %s ''' % (var, str(list(self.layer_prefixes.keys()))))
                 return None
             out = self.__layersplotwrapper(varlist, proj, bias=bias)
-        if seasonal:
+        elif seasonal:
             out = self.__seasonalplotwrapper(var, proj, bias=bias)
         else:
             out = self.__standard2Dplotwrapper(var, proj, bias=bias)
@@ -910,7 +919,7 @@ class SatComp_Metric(object):
             _ax, _im = self.standard2Dplot(var,_da, ax,projection=projection,
                                            bias=bias)#, vmin=0, vmax=100)
                 
-#         fig.colorbar(_im, ax=axes.ravel().tolist())
+        fig.colorbar(_im, ax=axes.ravel().tolist())
         
         yax = axes
         xlabels = [var]; xax = [axes[0]]
@@ -935,11 +944,10 @@ class SatComp_Metric(object):
                            projection=projection, figsize=[15,2*(len(self.cases)+1)])
             ylabels = ['GOCCP'] + self.case_labels
             
-            _axes = axes.flat[1:]
+            _axes = axes#.flat[1:]
         
         # Maybe reverse iteration order...?
         for var,varax in zip(varlist,_axes.transpose()):
-            print(var)
             # Plot observational data, always the raw data (not bias)
             if bias:
                 case_ax = varax
@@ -1014,7 +1022,9 @@ class SatComp_Metric(object):
         if projection == ccrs.NorthPolarStereo(): 
             lat_lims = [60,90]
             polarCentral_set_latlim(lat_lims, ax)
-
+        if projection == ccrs.SouthPolarStereo(): 
+            lat_lims = [-90,-60]
+            polarCentral_set_latlim(lat_lims, ax)
         if 'time' not in da.dims: # catches a bug with seasonal averages
             val = da[var].where(da['lat'] > lat_lims[0])
         else:
@@ -1023,10 +1033,9 @@ class SatComp_Metric(object):
         
         if bias:
             try: # get season observations if passed da is seasonally processed
-                print('Seasonalizing GOCCP data.')
                 season = val['season'].values
                 obs = season_mean(self.goccp_data[var]).sel(season=season).where(
-                                  da['lat'] > lat_lims[0]).where(np.absolute(self.goccp_data['lat'])<82).plot()
+                                  (da['lat'] > lat_lims[0]) & (np.absolute(self.goccp_data['lat'])<82))
 
             except:
                 obs = self.goccp_data[var].mean(dim = 'time', skipna=True).where(
@@ -1036,11 +1045,81 @@ class SatComp_Metric(object):
             im = val.plot(ax=ax,cmap=plt.get_cmap('bwr'),transform=ccrs.PlateCarree(),
                           add_colorbar=False, **kwargs)
         else:
-            im = val.plot(ax=ax,cmap=plt.get_cmap('Reds'),transform=ccrs.PlateCarree(),
+            im = val.plot(ax=ax,cmap=plt.get_cmap('jet'),transform=ccrs.PlateCarree(),
                       add_colorbar=False, vmin=0, vmax=100, **kwargs)
         add_map_features(ax)
                     
         return ax, im
+    
+    def band_biases(self, var):
+        '''
+        Calculate the model bias with respect to GOCCP over 10 degree(ish) latitude bands.
+        '''
+        out_dict = {}
+        
+        # Preprocessing observational data:
+        obs = self.goccp_data[var].mean('time', skipna=True)
+        obs_avg = []
+        for band in self.lat_bounds:
+            # calculate weighted average for goccp. Open bottom is arbitrary. 
+            # Remember weird mask convention! dah!
+            goccp_weights = self.goccp_data['cell_weight']
+            goccp_mask = np.bitwise_or(self.goccp_data['lat']<=band[0], 
+                                       self.goccp_data['lat']>band[1])
+            goccp_avg = masked_average(obs, dim=['lat','lon'], 
+                                       weights=goccp_weights, mask=goccp_mask)
+            obs_avg.append(goccp_avg.values)
+        print("obs_avg: ", obs_avg)
+        
+        print("Latitude Band Error (Model - GOCCP) for %s." % var)
+        # Iterate over the cases:
+        for k in self.cases:
+            _biases = []
+            _run = self.cases[k]
+            print(k)
+            _da = _run.case_da
+            _val = _da[var].mean('time', skipna=True)
+            _weights = _da['cell_weight']
+            for band,_goccp in zip(self.lat_bounds,obs_avg):
+                _mask = np.bitwise_or(_da['lat']<=band[0], 
+                                      _da['lat']>band[1])
+                _avg = masked_average(_val, dim=['lat','lon'], 
+                                      weights=_weights, mask=_mask)
+#                 print("Model: ", _avg.values, "Obs.: ", _goccp.value)
+                print("%s error: %s" % (_run.label, (_avg - _goccp).values))
+#                 biases += [_avg.values]
+                _biases.append(_avg.values)
+            out_dict[k] = _biases
+#             print(_avg.values, _da['lat'])
+        return out_dict
+            
+
+#         out_dict = {}
+#         obs = self.goccp_data[var].mean('time', skipna=True)
+#         print("Latitude Band Error (Model - GOCCP) for %s." % var)
+#         for band in self.lat_bounds:
+#             print(band)
+#             # calculate weighted average for goccp. Open bottom is arbitrary. 
+#             # Remember weird mask convention! dah!
+#             goccp_weights = self.goccp_data['cell_weight']
+#             goccp_mask = np.bitwise_or(self.goccp_data['lat']<=band[0], 
+#                                        self.goccp_data['lat']>band[1])
+#             goccp_avg = masked_average(obs, dim=['lat','lon'], 
+#                                        weights=goccp_weights, mask=goccp_mask)
+#             print(goccp_avg.values)
+            
+#             for k in self.cases:
+#                 _run = self.cases[k]
+#                 _da = _run.case_da
+#                 _val = _da[var].mean('time', skipna=True)
+#                 _weights = _da['cell_weight']
+#                 _mask = np.bitwise_or(_da['lat']<=band[0], 
+#                                       _da['lat']>band[1])
+#                 _avg = masked_average(_val, dim=['lat','lon'], 
+#                                            weights=_weights, mask=_mask)
+#                 print("%s error: %s" % (_run.label, (_avg - goccp_avg).values))
+#             print(_avg.values, _da['lat'])
+        # should return a datastructure with the saved biases
         
     def add_labels(self, xlabels=None, ylabels=None, xaxes=None, yaxes=None):
         try:
