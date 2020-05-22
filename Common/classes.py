@@ -29,7 +29,7 @@ class CT_SLF_Metric(object):
         self.cases = {}
         self.time_steps = time_steps
         self.month = sel_month
-        self.colors = ['blue','green','red','orange','purple','yellow', 'pink']
+        self.colors = ['red','orange','yellow','green','blue','purple','pink']
         
         try:
             self.ct_caliop_slf = xr.open_dataset('caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
@@ -53,11 +53,11 @@ class CT_SLF_Metric(object):
         
         # calculate values and set them to variables here
         
-    def add_case(self, case, path=None): # Dictionary can be overwritten, should be fine
+    def add_case(self, case, path=None, label=None): # Dictionary can be overwritten, should be fine
         if path == None:
-            self.cases[case] = CT_SLF_case(self.case_dir, case, timesteps=self.time_steps, months=self.month) # Add a ct_slf_case object to the cases dictionary
+            self.cases[case] = CT_SLF_case(self.case_dir, case, timesteps=self.time_steps, months=self.month, label=label) # Add a ct_slf_case object to the cases dictionary
         else:
-            self.cases[case] = CT_SLF_case(path, case, timesteps=self.time_steps, months=self.month) # Add a ct_slf_case object to the cases dictionary
+            self.cases[case] = CT_SLF_case(path, case, timesteps=self.time_steps, months=self.month, label=label) # Add a ct_slf_case object to the cases dictionary
             
     
     def get_case(self, case):
@@ -169,31 +169,30 @@ class CT_SLF_Metric(object):
                                
         return isos_plot
     
-    def plot_isos_all(self):        
+    def plot_isos_all(self, lat_range=[66.667,82]):        
         isos_plot = plt.figure(figsize=[10,10])
         plt.gca().invert_yaxis()
 
-#        plt.plot(self.bulk_caliop_slf['CALIOP_70S-90S'], self.bulk_caliop_slf['Isotherm'], 
-#                 color='black', label='CALIOP', linestyle='-',marker='o')
-
         # Plot satellite phase retrievals
         ic_caliop_weight = self.incloud_caliop_slf['cell_weight']
-        ic_caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<66.667, self.incloud_caliop_slf['lat']>82)
+        ic_caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<lat_range[0], 
+                                       self.incloud_caliop_slf['lat']>lat_range[1])
         ic_caliop_slf = 100*masked_average(self.incloud_caliop_slf['SLF'], dim=['lat','lon'], weights=ic_caliop_weight, mask=ic_caliop_mask)
-        ic_caliop_stdev = 100*np.std(self.incloud_caliop_slf['SLF'].sel(lat=slice(66.667,90)), axis=(0,1))
+        ic_caliop_stdev = 100*np.std(self.incloud_caliop_slf['SLF'].sel(
+                                     lat=slice(lat_range[0],lat_range[1])),axis=(0,1))
         plt.errorbar(ic_caliop_slf, ic_caliop_slf['isotherm'], xerr=ic_caliop_stdev, label='CALIOP SLF IC', fmt='o-', color = 'black', zorder=0)
         
         
         caliop_weight = self.ct_caliop_slf['cell_weight']
-        caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<66.667, self.ct_caliop_slf['lat']>82)
+        caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<lat_range[0], 
+                                    self.ct_caliop_slf['lat']>lat_range[1])
         caliop_slf = 100*masked_average(self.ct_caliop_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
-        caliop_stdev = 100*np.std(self.ct_caliop_slf['SLF'].sel(lat=slice(66.667,90)), axis=(0,1))
+        caliop_stdev = 100*np.std(self.ct_caliop_slf['SLF'].sel(lat=slice(lat_range[0],lat_range[1])), axis=(0,1))
         _line = plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', fmt='o', color = 'black', zorder=0, linestyle='-', marker='D')
                
-        colors = ['blue','green','red','orange','purple','yellow', 'pink']
         labels = ['CALIOP SLF']
         lines = [_line] 
-        for i,color in zip(self.cases, colors):
+        for i,color in zip(self.cases, self.colors):
             _run = self.cases[i]
             _case = _run.case_da
             
@@ -201,7 +200,7 @@ class CT_SLF_Metric(object):
             _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
             # this order of things must be thought about.
             weight_ct = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this weighting
-            mask = np.bitwise_or(_case['lat']<66.667, _case['lat']>82)
+            mask = np.bitwise_or(_case['lat']<lat_range[0], _case['lat']>lat_range[1])
             slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon'], weights=weight_ct, mask=mask) # error here related to having 'time' or not
             err = np.array(slf_ct) - np.array(caliop_slf)
             rms_ct = np.sqrt(np.mean(np.square(err)))
@@ -211,18 +210,9 @@ class CT_SLF_Metric(object):
             # Bulk SLF part
             # handle one-month runs here
             _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM'])
-            
-#            try:
-#                _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(time=slice('0001-04-01',
-#                                    '0002-03-01'))
-#            except:
-#                _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(time=slice('2000-04-01',
-#                                    '2001-03-01'))
-                
             weight_bulk = _case['cell_weight']
             slf_bulk = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon', 'time'], weights=weight_bulk, mask=mask)
             err = np.array(slf_bulk) - np.array(ic_caliop_slf)       
-#            err = np.array(slf_bulk)[::2][:-1] - np.array(self.bulk_caliop_slf['CALIOP_70S-90S'][:-1])
             rms_bulk = np.sqrt(np.mean(np.square(err)))
             
             plt.scatter(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color)
@@ -242,10 +232,9 @@ class CT_SLF_Metric(object):
         '''
         
         test_plot = plt.figure(figsize=[10,10])
-        colors = ['blue','green','red','orange','purple','yellow', 'pink']
         
         test_plot.gca().invert_yaxis()
-        for _casename, _col in zip(self.cases, colors):
+        for _casename, _col in zip(self.cases, self.colors):
             _case = self.cases[_casename]
             _da = _case.case_da
 #            print(_da.variables)
@@ -271,10 +260,9 @@ class CT_SLF_Metric(object):
         '''
         
         test_plot = plt.figure(figsize=[10,10])
-        colors = ['blue','green','red','orange','purple','yellow', 'pink']
         
         test_plot.gca().invert_yaxis()
-        for _casename, _col in zip(self.cases, colors):
+        for _casename, _col in zip(self.cases, self.colors):
             _case = self.cases[_casename]
             _da = _case.case_da
 #            print(_da.variables)
@@ -424,7 +412,7 @@ class CT_SLF_Metric(object):
         
 class CT_SLF_case:
     
-    def __init__(self, casedir, case, timesteps, months):
+    def __init__(self, casedir, case, timesteps, months, label):
         self.case_dir = casedir # General directory where all cases are stored
         self.case = case # The origin case name (wbf = 1, slf = 1)
         self.time_steps = timesteps
@@ -440,6 +428,7 @@ class CT_SLF_case:
         except: # Handle non-standard case name formats
             self.label = self.case
             self.date, self.time, self.paramfile, self.wbf_mult, self.inp_mult = ['None','None','None','None','None']
+        if label: self.label=label
         
     def add_ds(self):
     # create list of appropriate files
@@ -530,7 +519,7 @@ class SatComp_Metric(object):
             self.case_dir = casedir
             self.cases = {}
             self.case_labels = []
-            self.colors = ['blue','green','red','orange','purple','yellow', 'pink']
+            self.colors = ['red','orange','yellow','green','blue','purple','pink']
             self.__addlistsanddicts()
             
 #             self.load_GOCCP_data()
@@ -542,6 +531,11 @@ class SatComp_Metric(object):
                 print("Error: ", sys.exc_info())
                 return None
             
+            try:
+                self.load_CALIOP_olimpia()
+            except:
+                print("Could not load CALIOP SLFs.")
+                return None
             
         return self.goccp_data # necessary?
     
@@ -558,12 +552,12 @@ class SatComp_Metric(object):
                                          'CLDHGH_CAL_ICE','CLDHGH_CAL_UN'],
                           'CLDTOT_CAL': ['CLDTOT_CAL','CLDTOT_CAL_LIQ',
                                          'CLDTOT_CAL_ICE','CLDTOT_CAL_UN'],
-                          'CAL_UN':     ['CLDLOW_CAL_UN','CLDMED_CAL_UN',
-                                         'CLDHGH_CAL_UN','CLDTOT_CAL_UN'],
-                          'CAL_LIQ':    ['CLDLOW_CAL_LIQ','CLDMED_CAL_LIQ',
-                                         'CLDHGH_CAL_LIQ','CLDTOT_CAL_LIQ'],
-                          'CAL_ICE':    ['CLDLOW_CAL_ICE','CLDMED_CAL_ICE',
-                                         'CLDHGH_CAL_ICE','CLDTOT_CAL_ICE']}
+                          'CAL_UN':     ['CLDTOT_CAL_UN','CLDLOW_CAL_UN','CLDMED_CAL_UN',
+                                         'CLDHGH_CAL_UN'],
+                          'CAL_LIQ':    ['CLDTOT_CAL_LIQ','CLDLOW_CAL_LIQ','CLDMED_CAL_LIQ',
+                                         'CLDHGH_CAL_LIQ'],
+                          'CAL_ICE':    ['CLDTOT_CAL_ICE','CLDLOW_CAL_ICE','CLDMED_CAL_ICE',
+                                         'CLDHGH_CAL_ICE']}
         self.seasons = ['MAM','JJA','SON','DJF']
         self.projdict = {'PlateCarree':ccrs.PlateCarree(),'Arctic':ccrs.NorthPolarStereo(),
                          'Mollweide':ccrs.Mollweide(), "Antarctic":ccrs.SouthPolarStereo()}
@@ -582,6 +576,8 @@ class SatComp_Metric(object):
               [-30,-20],[-20,-10],[-10,0],[0,10],[10,20],[20,30],
               [30,40],[40,50],[50,60],[60,70],[70,82]]
         
+        self.seas_dict = {"DJF":0,"JJA":1,"MAM":2,"SON":3}
+        
     def load_GOCCP_data(self): # should this be private '__'
         '''
         Load GOCCP data for model comparison. Relabel variables to match model output.
@@ -589,7 +585,7 @@ class SatComp_Metric(object):
         Original data source:
         ftp://ftp.climserv.ipsl.polytechnique.fr/cfmip/GOCCP_v3/2D_Maps/grid_2x2xL40/
         '''
-        print('Loading GOCCP data.')
+        print('Loading GOCCP data...', end = '')
         
         goccp_dir = 'GOCCP_data/2Ddata/f19_tn14_interpolation/'
         #'/nird/home/jonahks/p/jonahks/GOCCP_data/'
@@ -640,15 +636,33 @@ class SatComp_Metric(object):
         # Rename variables so they will match COSP names and index correctly
         self.goccp_data = _goccp_data.rename(self.name_dict)
                 
-        print('GOCCP data loaded.')
+        print('done.')
         
-    def add_case(self, case, path=None): # Dictionary can be overwritten
+    def load_CALIOP_olimpia(self):
+        print('Loading CALIOP SLFs...', end = '')
+        try:
+            self.ct_caliop_slf = xr.open_dataset('caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
+        except:
+            print('Could not load cloudtop CALIOP slfs from caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
+            return
+        try:
+            self.incloud_caliop_slf = xr.open_dataset('caliop_olimpia/incloud_slf_olimpia/incloud_slfs.nc')
+        except: 
+            print('Could not load incloud CALIOP slfs from caliop_olimpia/incloud_slf_olimpia/incloud_slfs.nc')
+            return
+            
+        print("done")
+        
+    def add_case(self, case, path=None, label=None): # Dictionary can be overwritten
         # Add a SatComp_case object to the cases dictionary
         if path == None:
             self.cases[case] = SatComp_case(self.case_dir,case)
         else:
             self.cases[case] = SatComp_case(path, case)
-        self.case_labels += [self.cases[case].label]
+        if label:
+            self.case_labels += [label]
+        else:
+            self.case_labels += [self.cases[case].label]
     
     def get_case(self, case):
         if case not in self.cases: # check if it is already in the dictionary
@@ -668,8 +682,8 @@ class SatComp_Metric(object):
         if (seasonal and season):
             print('Cannot plot both season %s and seasonal: True. \n')
             return None     
-        if (season and season not in seasons):
-            print('%s not a valid argument for "season"' % season, seasons)
+        if (season and season not in self.seasons):
+            print('%s not a valid argument for "season"' % season, self.seasons)
             return None
         
         # call appropriate plotting wrapper
@@ -685,13 +699,13 @@ class SatComp_Metric(object):
                                                           lat_range=lat_range)
             else:    
                 return self.__layers1Dplotwrapper(varlist, bias=bias, 
-                                                  lat_range=lat_range)
+                                                  lat_range=lat_range, season=season)
         if seasonal:
             return self.__seasonal1Dplotwrapper(var, bias=bias, 
                                                 lat_range=lat_range)
         else:
             return self.__standard1Dplotwrapper(var, bias=bias, 
-                                                lat_range=lat_range)
+                                                lat_range=lat_range, season=season)
         
 #         self.standard1Dplot(var, self.goccp_data)
 
@@ -707,6 +721,9 @@ class SatComp_Metric(object):
         for k in self.cases:
             _run = self.cases[k]
             _da = _run.case_da
+            if season:
+                _season_da = season_mean(_da[var]).where(np.absolute(_da['lat'])<82)
+                _da = _season_da[self.seas_dict[season]].to_dataset(name=var)
             
             # Works with percents only
             self.__standard1Dplot(var, _da, axes, bias=bias, lat_range=lat_range, label=_run.label)
@@ -715,12 +732,18 @@ class SatComp_Metric(object):
         
         return fig
 
-    def __layers1Dplotwrapper(self, varlist, bias=False, lat_range=None, **kwargs):
+    def __layers1Dplotwrapper(self, varlist, bias=False, lat_range=None, season=None, **kwargs):
         '''Plot variable against latitude for observations and loaded model runs.'''
 
-        fig, axes = plt.subplots(nrows=len(varlist),ncols=1,figsize=[10,2*len(varlist)])
-        labels = ['GOCCP'] + self.case_labels
-                
+#         fig, axes = plt.subplots(nrows=len(varlist),ncols=1,figsize=[10,2*len(varlist)])
+
+        fig, axes = plt.subplots(nrows=1,ncols=len(varlist),figsize=[15,5])
+        
+        if bias:
+            labels = self.case_labels
+        else:
+            labels = ['GOCCP'] + self.case_labels
+        
         for var,ax in zip(varlist,axes):
             if not bias:
                 self.__standard1Dplot(var, self.goccp_data,ax,bias=False,
@@ -729,13 +752,21 @@ class SatComp_Metric(object):
             for k in self.cases:
                 _run = self.cases[k]
                 _da = _run.case_da
+                if season:
+                    _season_da = season_mean(_da[var]).where(np.absolute(_da['lat'])<82)
+                    _da = _season_da[self.seas_dict[season]].to_dataset(name=var)
+                
                 self.__standard1Dplot(var, _da, ax, bias=bias,
                                       lat_range=lat_range,label=_run.label)
         
         fig.legend(labels=labels)
         
         xlabels = varlist; xax = axes
-        self.add_labels(xlabels=xlabels, xaxes=xax)
+        if bias:
+            self.add_labels(xlabels=xlabels, xaxes=xax, ylabels=["Bias (Model-Observation)"], 
+                            yaxes=[axes[0]])
+        else:
+            self.add_labels(xlabels=xlabels, xaxes=xax)
         self.share_ylims(axes)
         
         fig.subplots_adjust(hspace=0.5)
@@ -836,7 +867,7 @@ class SatComp_Metric(object):
             except:
                 obs = self.goccp_data[var].mean(dim = ['time','lon'], skipna=True)
             
-            val = val.interp_like(obs) # quick interp fix for weird grid mismatch (bad?)
+            val = val.interp_like(self.goccp_data[var]) # quick interp fix for weird grid mismatch (bad?)
             val = val - obs
 
             im = val.sel(lat=slice(lat_lims[0],lat_lims[1])).plot(ax=ax, add_legend=False, **kwargs)
@@ -886,10 +917,7 @@ class SatComp_Metric(object):
             out = self.__seasonalplotwrapper(var, proj, bias=bias)
         else:
             out = self.__standard2Dplotwrapper(var, proj, bias=bias)
-        
-        self.share_ylims(out.get_axes()) # jshaw to-do, unsure
-#         out.colorbar(_im, ax=out.get_axes().ravel().tolist())
-        
+                
         return out
         
     def __standard2Dplotwrapper(self, var, projection, bias=False, **kwargs):
@@ -918,14 +946,18 @@ class SatComp_Metric(object):
             # Works with percents only
             _ax, _im = self.standard2Dplot(var,_da, ax,projection=projection,
                                            bias=bias)#, vmin=0, vmax=100)
-                
-        fig.colorbar(_im, ax=axes.ravel().tolist())
-        
+                        
         yax = axes
         xlabels = [var]; xax = [axes[0]]
         
         self.add_labels(ylabels=ylabels, yaxes=yax, xlabels=xlabels, xaxes=xax)
         
+        cbar = fig.colorbar(_im, ax=axes.ravel().tolist())
+        if bias:
+            cbar.set_label("Bias (%s)" % _da[var].units)
+        else:
+            cbar.set_label("%s (%s)" % (_da[var].long_name,_da[var].units), fontsize=12)
+
         plt.show()
         return fig
 
@@ -937,17 +969,14 @@ class SatComp_Metric(object):
             fig, axes = sp_map(nrows=len(self.cases), ncols=len(varlist),
                            projection=projection, figsize=[15,2*(len(self.cases))])
             ylabels = self.case_labels
-            _axes = axes
             
         else:
             fig, axes = sp_map(nrows=len(self.cases)+1, ncols=len(varlist),
                            projection=projection, figsize=[15,2*(len(self.cases)+1)])
             ylabels = ['GOCCP'] + self.case_labels
             
-            _axes = axes#.flat[1:]
         
-        # Maybe reverse iteration order...?
-        for var,varax in zip(varlist,_axes.transpose()):
+        for var,varax in zip(varlist,axes.transpose()):
             # Plot observational data, always the raw data (not bias)
             if bias:
                 case_ax = varax
@@ -964,13 +993,14 @@ class SatComp_Metric(object):
                 # Works with percents only
                 _ax, _im = self.standard2Dplot(var,_da, ax,projection=projection,
                                                bias=bias)#, vmin=0, vmax=100) 
-            
-        fig.colorbar(_im, ax=axes.ravel().tolist())
         
         yax = axes[:,0]
         xlabels = varlist; xax = axes[0,:]
         self.add_labels(ylabels=ylabels, yaxes=yax, xlabels=xlabels, xaxes=xax)
-        
+
+        cbar = fig.colorbar(_im, ax=axes.ravel().tolist())
+        if bias:
+            cbar.set_label("Bias (Model - Observations)")
         return fig
     
     def __seasonalplotwrapper(self, var, projection, bias=False, **kwargs):
@@ -1006,7 +1036,11 @@ class SatComp_Metric(object):
                 _ax, _im = self.standard2Dplot(var, seas.to_dataset(name=var), ax,
                                 projection=projection, bias=bias)
         
-        fig.colorbar(_im, ax=axes.ravel().tolist())
+        cbar = fig.colorbar(_im, ax=axes.ravel().tolist())
+        if bias:
+            cbar.set_label("Bias (%s)" % _da[var].units)
+        else:
+            cbar.set_label("%s (%s)" % (_da[var].long_name,_da[var].units), fontsize=12)
         
         yax = axes[:,0]
         xlabels = _season_da.coords['season'].values; xax = axes[0,:]
@@ -1020,7 +1054,7 @@ class SatComp_Metric(object):
         '''
         lat_lims = [-90,90]
         if projection == ccrs.NorthPolarStereo(): 
-            lat_lims = [60,90]
+            lat_lims = [60,90] # jks
             polarCentral_set_latlim(lat_lims, ax)
         if projection == ccrs.SouthPolarStereo(): 
             lat_lims = [-90,-60]
@@ -1029,7 +1063,7 @@ class SatComp_Metric(object):
             val = da[var].where(da['lat'] > lat_lims[0])
         else:
             val = da[var].mean(dim = 'time', skipna=True).where(
-                                da['lat'] > lat_lims[0])
+                                da['lat'] > lat_lims[0])            
         
         if bias:
             try: # get season observations if passed da is seasonally processed
@@ -1040,6 +1074,7 @@ class SatComp_Metric(object):
             except:
                 obs = self.goccp_data[var].mean(dim = 'time', skipna=True).where(
                                                 da['lat'] > lat_lims[0])
+            obs = obs.interp_like(val) # quick interp fix for weird grid mismatch (bad.)
             val = val - obs
 
             im = val.plot(ax=ax,cmap=plt.get_cmap('bwr'),transform=ccrs.PlateCarree(),
@@ -1087,39 +1122,67 @@ class SatComp_Metric(object):
                                       weights=_weights, mask=_mask)
 #                 print("Model: ", _avg.values, "Obs.: ", _goccp.value)
                 print("%s error: %s" % (_run.label, (_avg - _goccp).values))
-#                 biases += [_avg.values]
                 _biases.append(_avg.values)
             out_dict[k] = _biases
 #             print(_avg.values, _da['lat'])
         return out_dict
             
+        
+    def plot_slf_isos(self):
+        isos_plot = plt.figure(figsize=[10,10])
+        plt.gca().invert_yaxis()
 
-#         out_dict = {}
-#         obs = self.goccp_data[var].mean('time', skipna=True)
-#         print("Latitude Band Error (Model - GOCCP) for %s." % var)
-#         for band in self.lat_bounds:
-#             print(band)
-#             # calculate weighted average for goccp. Open bottom is arbitrary. 
-#             # Remember weird mask convention! dah!
-#             goccp_weights = self.goccp_data['cell_weight']
-#             goccp_mask = np.bitwise_or(self.goccp_data['lat']<=band[0], 
-#                                        self.goccp_data['lat']>band[1])
-#             goccp_avg = masked_average(obs, dim=['lat','lon'], 
-#                                        weights=goccp_weights, mask=goccp_mask)
-#             print(goccp_avg.values)
+        # Plot satellite phase retrievals
+        ic_caliop_weight = self.incloud_caliop_slf['cell_weight']
+        ic_caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<66.667, 
+                                       self.incloud_caliop_slf['lat']>82)
+        ic_caliop_slf = 100*masked_average(self.incloud_caliop_slf['SLF'], dim=['lat','lon'],
+                                           weights=ic_caliop_weight, mask=ic_caliop_mask)
+        ic_caliop_stdev = 100*np.std(self.incloud_caliop_slf['SLF'].sel(lat=slice(66.667,90)), axis=(0,1))
+        plt.errorbar(ic_caliop_slf, ic_caliop_slf['isotherm'], xerr=ic_caliop_stdev, 
+                     label='CALIOP SLF IC', fmt='o-', color = 'black', zorder=0)
+        
+        
+        caliop_weight = self.ct_caliop_slf['cell_weight']
+        caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<66.667, self.ct_caliop_slf['lat']>82)
+        caliop_slf = 100*masked_average(self.ct_caliop_slf['SLF'], dim=['lat','lon'], 
+                                        weights=caliop_weight, mask=caliop_mask)
+        caliop_stdev = 100*np.std(self.ct_caliop_slf['SLF'].sel(lat=slice(66.667,90)), axis=(0,1))
+        _line = plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF',
+                             fmt='o', color = 'black', zorder=0, linestyle='-', marker='D')
+
+        labels = ['CALIOP']
+        lines = [_line]
+        for i,color in zip(self.cases, self.colors):
+            _run = self.cases[i]
+            _case = _run.case_da
+            _weight = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this weighting
+            _mask = np.bitwise_or(_case['lat']<66.667, _case['lat']>82)
             
-#             for k in self.cases:
-#                 _run = self.cases[k]
-#                 _da = _run.case_da
-#                 _val = _da[var].mean('time', skipna=True)
-#                 _weights = _da['cell_weight']
-#                 _mask = np.bitwise_or(_da['lat']<=band[0], 
-#                                       _da['lat']>band[1])
-#                 _avg = masked_average(_val, dim=['lat','lon'], 
-#                                            weights=_weights, mask=_mask)
-#                 print("%s error: %s" % (_run.label, (_avg - goccp_avg).values))
-#             print(_avg.values, _da['lat'])
-        # should return a datastructure with the saved biases
+            # Cloudtop SLF part
+            _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
+            slf_ct = 100*masked_average(_case['CT_SLF_TAVG'], dim=['lat','lon'], weights=_weight, mask=_mask)
+            err = np.array(slf_ct) - np.array(caliop_slf)
+            rms_ct = np.sqrt(np.mean(np.square(err)))
+
+            _line = plt.scatter(slf_ct, slf_ct['isotherms_mpc'] - 273.15, 
+                                label=(_run.label+' RMSE: %.2f' % rms_ct), color=color, marker='D')
+            
+            # Bulk SLF part
+            _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM'])
+            slf_bulk = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon', 'time'], weights=_weight, mask=_mask)
+            err = np.array(slf_bulk) - np.array(ic_caliop_slf)       
+            rms_bulk = np.sqrt(np.mean(np.square(err)))
+            
+            plt.scatter(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, 
+                        label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color)
+            labels.append(_run.label+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
+            lines.append(_line)
+            
+        plt.xlabel('SLF (%)', fontsize=18)
+        plt.ylabel('Isotherm (C)', fontsize=18)
+        plt.legend(lines, labels)
+        plt.title('SLF trends with microphysical modifications', fontsize=24)
         
     def add_labels(self, xlabels=None, ylabels=None, xaxes=None, yaxes=None):
         try:
@@ -1184,9 +1247,10 @@ class SatComp_case:
             print('Failed, using xr.open_mfdataset.')
             self.geth0s() # create list of appropriate output files self.files
             _ds = xr.open_mfdataset(self.files)#, combine='by_coords') #, chunks={'lat':10}) #chunk?
-            
-        ds = _ds.sel(time=slice('2009-06-01', '2013-05-01')) # gets all 48 files
-            
+        try:
+            ds = _ds.sel(time=slice('2009-06-01', '2013-05-01')) # gets all 48 files
+        except:
+            print("Four-year format not found.")
         ds = add_weights(ds)
         
         # Normalize calculated SLF values.
