@@ -30,20 +30,29 @@ class CT_SLF_Metric(object):
         self.time_steps = time_steps
         self.month = sel_month
         self.colors = ['red','orange','yellow','green','blue','purple','pink']
+        self.seas_dict = {"DJF":0,"JJA":1,"MAM":2,"SON":3}
         
         try:
             self.ct_caliop_slf = xr.open_dataset('caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
         except:
             print('Could not load cloudtop cloud CALIOP slfs from caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
-        try:
-            self.bulk_caliop_slf = pd.read_csv('caliop_slfs/MPC_ISO_CALIOP_NorESM.csv')
-        except: 
-            print('Could not load bulk cloud CALIOP slfs from caliop_slfs/MPC_ISO_CALIOP_NorESM.csv')
+#         try:
+#             self.bulk_caliop_slf = pd.read_csv('caliop_slfs/MPC_ISO_CALIOP_NorESM.csv')
+#         except: 
+#             print('Could not load bulk cloud CALIOP slfs from caliop_slfs/MPC_ISO_CALIOP_NorESM.csv')
         try:
             self.incloud_caliop_slf = xr.open_dataset('caliop_olimpia/incloud_slf_olimpia/incloud_slfs.nc')
         except: 
             print('Could not load incloud cloud CALIOP slfs from caliop_olimpia/incloud_slf_olimpia/incloud_slfs.nc')            
-
+        try:
+            self.seasonal_ct_slf = xr.open_dataset('caliop_olimpia/seasonal_data/cloudtop_slfs_seasonal.nc')
+        except:
+            print('Could not load seasonal cloudtop SLFs')
+        try:
+            self.seasonal_incloud_slf = xr.open_dataset('caliop_olimpia/seasonal_data/incloud_slfs_seasonal.nc')
+        except:
+            print('Could not load seasonal incloud SLFs')
+            
     def set_origin(self, case): # case is a string of the case name
         if case not in self.cases: # check if it is already in the dictionary
             self.add_case(case) 
@@ -169,25 +178,36 @@ class CT_SLF_Metric(object):
                                
         return isos_plot
     
-    def plot_isos_all(self, lat_range=[66.667,82]):        
+    def plot_isos_all(self, lat_range=[66.667,82],season=None):        
         isos_plot = plt.figure(figsize=[10,10])
         plt.gca().invert_yaxis()
 
+        if season: # handle looking at specific seasons
+            ic_season_da = season_mean(self.seasonal_incloud_slf['SLF'])
+            ct_season_da = season_mean(self.seasonal_ct_slf['SLF'])
+            _ic_slf = ic_season_da.sel(season=season).to_dataset(name='SLF')
+            _ct_slf = ct_season_da.sel(season=season).to_dataset(name='SLF')
+            ic_slf = add_weights(_ic_slf)
+            ct_slf = add_weights(_ct_slf)
+        else:
+            ic_slf = self.incloud_caliop_slf
+            ct_slf = self.ct_caliop_slf
+        
         # Plot satellite phase retrievals
-        ic_caliop_weight = self.incloud_caliop_slf['cell_weight']
-        ic_caliop_mask = np.bitwise_or(self.incloud_caliop_slf['lat']<lat_range[0], 
-                                       self.incloud_caliop_slf['lat']>lat_range[1])
-        ic_caliop_slf = 100*masked_average(self.incloud_caliop_slf['SLF'], dim=['lat','lon'], weights=ic_caliop_weight, mask=ic_caliop_mask)
-        ic_caliop_stdev = 100*np.std(self.incloud_caliop_slf['SLF'].sel(
+        ic_caliop_weight = ic_slf['cell_weight']
+        ic_caliop_mask = np.bitwise_or(ic_slf['lat']<lat_range[0], 
+                                       ic_slf['lat']>lat_range[1])
+        ic_caliop_slf = 100*masked_average(ic_slf['SLF'], dim=['lat','lon'], weights=ic_caliop_weight, mask=ic_caliop_mask)
+        ic_caliop_stdev = 100*np.std(ic_slf['SLF'].sel(
                                      lat=slice(lat_range[0],lat_range[1])),axis=(0,1))
         plt.errorbar(ic_caliop_slf, ic_caliop_slf['isotherm'], xerr=ic_caliop_stdev, label='CALIOP SLF IC', fmt='o-', color = 'black', zorder=0)
         
         
-        caliop_weight = self.ct_caliop_slf['cell_weight']
-        caliop_mask = np.bitwise_or(self.ct_caliop_slf['lat']<lat_range[0], 
-                                    self.ct_caliop_slf['lat']>lat_range[1])
-        caliop_slf = 100*masked_average(self.ct_caliop_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
-        caliop_stdev = 100*np.std(self.ct_caliop_slf['SLF'].sel(lat=slice(lat_range[0],lat_range[1])), axis=(0,1))
+        caliop_weight = ct_slf['cell_weight']
+        caliop_mask = np.bitwise_or(ct_slf['lat']<lat_range[0], 
+                                    ct_slf['lat']>lat_range[1])
+        caliop_slf = 100*masked_average(ct_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
+        caliop_stdev = 100*np.std(ct_slf['SLF'].sel(lat=slice(lat_range[0],lat_range[1])), axis=(0,1))
         _line = plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', fmt='o', color = 'black', zorder=0, linestyle='-', marker='D')
                
         labels = ['CALIOP SLF']
@@ -197,7 +217,10 @@ class CT_SLF_Metric(object):
             _case = _run.case_da
             
             # Cloudtop SLF part
-            _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
+            if season: # handle looking at specific seasons
+                _case['CT_SLF_TAVG'] = season_mean(_case['CT_SLF']).sel(season=season)
+            else:
+                _case['CT_SLF_TAVG'] = _case['CT_SLF'].mean(dim = 'time', skipna=True)
             # this order of things must be thought about.
             weight_ct = _case['cell_weight']#*_case['CT_CLD_ISOTM'] #Not sure about this weighting
             mask = np.bitwise_or(_case['lat']<lat_range[0], _case['lat']>lat_range[1])
@@ -209,16 +232,19 @@ class CT_SLF_Metric(object):
             
             # Bulk SLF part
             # handle one-month runs here
-            _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM'])
+            if season: # handle looking at specific seasons
+                _case['SLF_ISOTM'] = season_mean(_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(season=season)
+            else:
+                _case['SLF_ISOTM'] = (_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).mean(dim = 'time', skipna=True)
             weight_bulk = _case['cell_weight']
-            slf_bulk = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon', 'time'], weights=weight_bulk, mask=mask)
+            slf_bulk = 100*masked_average(_case['SLF_ISOTM'], dim=['lat','lon'], weights=weight_bulk, mask=mask)
             err = np.array(slf_bulk) - np.array(ic_caliop_slf)       
             rms_bulk = np.sqrt(np.mean(np.square(err)))
             
             plt.scatter(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color)
             labels.append(_run.label+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
             lines.append(_line)
-            
+        plt.xlim([-5,105])    
         plt.xlabel('SLF (%)', fontsize=18)
         plt.ylabel('Isotherm (C)', fontsize=18)
         plt.legend(lines, labels)
@@ -709,7 +735,7 @@ class SatComp_Metric(object):
         
 #         self.standard1Dplot(var, self.goccp_data)
 
-    def __standard1Dplotwrapper(self, var, bias=False, lat_range=None, **kwargs):
+    def __standard1Dplotwrapper(self, var, bias=False, lat_range=None, season=None, **kwargs):
         '''Plot variable against latitude for observations and loaded model runs.'''
         
         # Using plt.subplots only for consistency here.
