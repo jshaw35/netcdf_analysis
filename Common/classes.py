@@ -208,7 +208,7 @@ class CT_SLF_Metric(object):
                
         labels = ['CALIOP SLF']
         lines = [_line] 
-        for i,color in zip(self.cases, self.colors):
+        for i,color in zip(self.cases, self.colors): # [3:]
             _run = self.cases[i]
             _case = _run.case_da
             
@@ -514,7 +514,7 @@ class CT_SLF_case:
         
 class SatComp_Metric(object):
     '''
-    Class for comparing model runs with GOCCP satellite data.
+    Class for comparing model runs with GOCCP and CERES-EBAF satellite data.
     Produces latitudinal averages, comparison plots, and model bias plots 
     seasonally, and with different mapping projections.
     
@@ -563,7 +563,6 @@ class SatComp_Metric(object):
             except:
                 print('Failed to load CERES-EBAF data.')
                 
-#         return self.goccp_data # necessary?
     
     def __addlistsanddicts(self):
         '''
@@ -577,7 +576,7 @@ class SatComp_Metric(object):
                           'CLDHGH_CAL': ['CLDHGH_CAL','CLDHGH_CAL_LIQ',
                                          'CLDHGH_CAL_ICE','CLDHGH_CAL_UN'],
                           'CLDTOT_CAL': ['CLDTOT_CAL','CLDTOT_CAL_LIQ',
-                                         'CLDTOT_CAL_ICE','CLDTOT_CAL_UN'],
+                                         'CLDTOT_CAL_ICE'],#,'CLDTOT_CAL_UN'],
                           'CAL_UN':     ['CLDTOT_CAL_UN','CLDLOW_CAL_UN','CLDMED_CAL_UN',
                                          'CLDHGH_CAL_UN'],
                           'CAL_LIQ':    ['CLDTOT_CAL_LIQ','CLDLOW_CAL_LIQ','CLDMED_CAL_LIQ',
@@ -659,7 +658,6 @@ class SatComp_Metric(object):
              _goccp_data[i] = _goccp_data[i].isel(cat1=0)
         # Scale cloud fraction values to a percent value to match COSP
         goccp_vars = list(self.name_dict.keys())
-
         for i in goccp_vars: #think maybe: with xr.set_options(keep_attrs=True)
             _goccp_data[i] = 100*_goccp_data[i]
             
@@ -693,10 +691,10 @@ class SatComp_Metric(object):
         print('Loading CERES-EBAF fluxes...', end = '')
         _ceres_data = xr.open_dataset('CERES_EBAF/CERES_EBAF_FLX_CRE_2X2.nc')
         _ceres_data = _ceres_data.sel(time=slice('2009-06-01', '2013-05-31'))
+        _ceres_data = add_weights(_ceres_data)
         
         # Rename variables so they will match standard CAM variables names and index correctly
         self.ceres_data = _ceres_data.rename(self.ceres_var_dict)
-#         self.goccp_data = xr.merge([self.goccp_data, self.ceres_data]) # easiest way w/o renaming
         print('done.')
         
     def add_case(self, case, path=None, label=None): # Dictionary can be overwritten
@@ -706,6 +704,7 @@ class SatComp_Metric(object):
         else:
             self.cases[case] = SatComp_case(path, case)
         if label:
+            self.cases[case].label = label
             self.case_labels += [label]
         else:
             self.case_labels += [self.cases[case].label]
@@ -760,10 +759,10 @@ class SatComp_Metric(object):
 
         # Using plt.subplots only for consistency here.
         fig, axes = plt.subplots(nrows=1,ncols=1,figsize=[6,4])
-        obs_source = self.__get_data_source(var)
+        obs_source, obs_label = self.__get_data_source(var)
         if not bias:
-            self.__standard1Dplot(var, obs_source, axes, # twice here weird
-                                  lat_range=lat_range, label='GOCCP')
+            self.__standard1Dplot(var, obs_source, axes,
+                                  lat_range=lat_range, label=obs_label)
         
         for k in self.cases:
             _run = self.cases[k]
@@ -785,17 +784,17 @@ class SatComp_Metric(object):
 #         fig, axes = plt.subplots(nrows=len(varlist),ncols=1,figsize=[10,2*len(varlist)])
 
         fig, axes = plt.subplots(nrows=1,ncols=len(varlist),figsize=[15,5])
+        obs_source, obs_label = self.__get_data_source(varlist[0])            
         
         if bias:
             labels = self.case_labels
         else:
-            labels = ['GOCCP'] + self.case_labels # jks fix
+            labels = [obs_label] + self.case_labels
         
         for var,ax in zip(varlist,axes):
-            obs_source = self.__get_data_source(var)
             if not bias:
                 self.__standard1Dplot(var, obs_source,ax,bias=False,
-                                      lat_range=lat_range, label='GOCCP') # jks fix
+                                      lat_range=lat_range, label=obs_label) # does this handle season? jks
             
             for k in self.cases:
                 _run = self.cases[k]
@@ -823,13 +822,13 @@ class SatComp_Metric(object):
         
     def __seasonal1Dplotwrapper(self, var, bias=False, lat_range=None, **kwargs):
         '''Plot variable against latitude for observations and loaded model runs.'''
-        obs_source = self.__get_data_source(var)
+        obs_source, obs_label = self.__get_data_source(var)
         fig, axes = plt.subplots(nrows=1,ncols=4,figsize=[15,4])
     
         if bias: 
             labels = self.case_labels
         else:
-            labels = ['GOCCP'] + self.case_labels # jks fix
+            labels = [obs_label] + self.case_labels
             _season_da = season_mean(obs_source[var]).where(np.absolute(obs_source['lat'])<82)
             for seas,ax in zip(_season_da,axes):
                 self.__standard1Dplot(var, seas.to_dataset(name=var),ax,
@@ -859,20 +858,20 @@ class SatComp_Metric(object):
         runs.'''
 
         fig, axes = plt.subplots(nrows=len(varlist),ncols=4,figsize=[15,3*len(varlist)])
-                
+        obs_source, obs_label = self.__get_data_source(varlist[0])
+        
         # Preprocessing step:
         for var, xax in zip(varlist, axes): # iterate over rows (i.e. layer vars)
-            obs_source = self.__get_data_source(var)
             var_processed = []
             if bias: 
                 labels = self.case_labels
             else:
-                labels = ['GOCCP'] + self.case_labels
+                labels = [obs_label] + self.case_labels
                 _season_da = season_mean(obs_source[var]).where(np.absolute(obs_source['lat'])<82)
 
                 for seas,ax in zip(_season_da,xax): #iterate over columns (seasons)
                     self.__standard1Dplot(var, seas.to_dataset(name=var),ax,
-                                          bias=False, lat_range=lat_range, label='GOCCP')
+                                          bias=False, lat_range=lat_range, label=obs_label)
             
             for k in self.cases:
                 _run = self.cases[k]
@@ -896,7 +895,7 @@ class SatComp_Metric(object):
     def __standard1Dplot(self, var, da, ax, bias=False, lat_range=None, **kwargs):
         '''
         Simple 1D plotting function. Need to build in better labels+bias.'''
-        obs_source = self.__get_data_source(var)
+        obs_source, obs_label = self.__get_data_source(var)
 
         lat_lims = [-90,90]
         if lat_range:
@@ -962,19 +961,19 @@ class SatComp_Metric(object):
                 print('''Layers prefix %s not found. Select from: \n
                 %s ''' % (var, str(list(self.layer_prefixes.keys()))))
                 return None
-            out = self.__layersplotwrapper(varlist, proj, bias=bias)
+            out = self.__layersplotwrapper(varlist, proj, bias=bias, season=season)
         elif seasonal:
             out = self.__seasonalplotwrapper(var, proj, bias=bias)
         else:
-            out = self.__standard2Dplotwrapper(var, proj, bias=bias)
+            out = self.__standard2Dplotwrapper(var, proj, bias=bias, season=season)
                 
         return out
         
-    def __standard2Dplotwrapper(self, var, projection, bias=False, **kwargs):
+    def __standard2Dplotwrapper(self, var, projection, bias=False, season=None, **kwargs):
         '''
         Create subplots object and iterate over cases to plot with correct projection, etc.
         '''
-        obs_source = self.__get_data_source(var)
+        obs_source, obs_label = self.__get_data_source(var)
         if bias:
             fig, axes = sp_map(nrows=len(self.cases), ncols=1,
                            projection=projection, figsize=[15,2*(len(self.cases))])
@@ -984,8 +983,12 @@ class SatComp_Metric(object):
         else:
             fig, axes = sp_map(nrows=len(self.cases)+1, ncols=1,
                            projection=projection, figsize=[15,2*(len(self.cases)+1)])
-            ylabels = ['GOCCP'] + self.case_labels # jks fix
+            ylabels = [obs_label] + self.case_labels
             
+            # jks handle season
+            if season:
+                _season_da = season_mean(obs_source[var]).where(np.absolute(obs_source['lat'])<82)
+                obs_source = _season_da[self.seas_dict[season]].to_dataset(name=var)
             self.standard2Dplot(var, obs_source, axes.flat[0],
                                 projection=projection, bias=False)
             _axes = axes.flat[1:]
@@ -995,6 +998,11 @@ class SatComp_Metric(object):
             _da = _run.case_da
             
             # Works with percents only
+            # jks handle season?
+            if season:
+                _season_da = season_mean(_da[var])
+                _da = _season_da[self.seas_dict[season]].to_dataset(name=var)
+                
             _ax, _im = self.standard2Dplot(var,_da, ax,projection=projection,
                                            bias=bias)
                         
@@ -1003,36 +1011,43 @@ class SatComp_Metric(object):
         
         self.add_labels(ylabels=ylabels, yaxes=yax, xlabels=xlabels, xaxes=xax)
         
+        self.share_clims(fig)
+        
         cbar = fig.colorbar(_im, ax=axes.ravel().tolist()) # this doesn't get the right bounds
         if bias:
-            cbar.set_label("Bias (%s)" % _da[var].units)
+            cbar.set_label("Bias (Model - Observations) of %s (%s)" % (_da[var].long_name,_da[var].units), fontsize=12)
+#             cbar.set_label("Bias (%s)" % _da[var].units)
         else:
             cbar.set_label("%s (%s)" % (_da[var].long_name,_da[var].units), fontsize=12)
 
         plt.show()
         return fig
 
-    def __layersplotwrapper(self, varlist, projection, bias=False, **kwargs):
+    def __layersplotwrapper(self, varlist, projection, bias=False, season=None, **kwargs):
         '''
         Create subplots object and iterate over cases to plot with correct projection, etc.
         '''
-        obs_source = self.__get_data_source(varlist[0]) # layers must share a source
+        obs_source, obs_label = self.__get_data_source(varlist[0]) # layers must share a source
         
         if bias:
             fig, axes = sp_map(nrows=len(self.cases), ncols=len(varlist),
-                           projection=projection, figsize=[15,2*(len(self.cases))])
+                           projection=projection, figsize=[3*len(varlist),2*(len(self.cases))])
             ylabels = self.case_labels
             
         else:
             fig, axes = sp_map(nrows=len(self.cases)+1, ncols=len(varlist),
                            projection=projection, figsize=[15,2*(len(self.cases)+1)])
-            ylabels = ['GOCCP'] + self.case_labels # jks fix
+            ylabels = [obs_label] + self.case_labels
             
         for var,varax in zip(varlist,axes.transpose()):
             # Plot observational data, always the raw data (not bias)
             if bias:
                 case_ax = varax
             else:
+                if season:
+                    _season_da = season_mean(obs_source[var]).where(np.absolute(obs_source['lat'])<82)
+                    obs_source = _season_da[self.seas_dict[season]].to_dataset(name=var)
+                    
                 _ax, _im = self.standard2Dplot(var, obs_source, varax[0],
                                 projection=projection, bias=False)
                 case_ax = varax[1:]
@@ -1041,6 +1056,10 @@ class SatComp_Metric(object):
             for ax, k in zip(case_ax, self.cases):
                 _run = self.cases[k]
                 _da = _run.case_da
+            
+                if season:
+                    _season_da = season_mean(_da[var])
+                    _da = _season_da[self.seas_dict[season]].to_dataset(name=var)
 
                 # Works with percents only
                 _ax, _im = self.standard2Dplot(var,_da, ax,projection=projection,
@@ -1050,6 +1069,8 @@ class SatComp_Metric(object):
         xlabels = varlist; xax = axes[0,:]
         self.add_labels(ylabels=ylabels, yaxes=yax, xlabels=xlabels, xaxes=xax)
 
+        self.share_clims(fig)
+        
         cbar = fig.colorbar(_im, ax=axes.ravel().tolist())
         if bias:
             cbar.set_label("Bias (Model - Observations)")
@@ -1059,7 +1080,7 @@ class SatComp_Metric(object):
         '''
         Create subplots object and iterate over cases to plot with correct projection, etc.
         '''
-        obs_source = self.__get_data_source(var)
+        obs_source, obs_label = self.__get_data_source(var)
         
         if bias:
             fig, axes = sp_map(nrows=len(self.cases), ncols=4,
@@ -1070,7 +1091,7 @@ class SatComp_Metric(object):
         else:
             fig, axes = sp_map(nrows=len(self.cases)+1, ncols=4,
                            projection=projection, figsize=[15,2*(len(self.cases)+1)])
-            ylabels = ['GOCCP'] + self.case_labels # jks fix
+            ylabels = [obs_label] + self.case_labels
             
             _season_da = season_mean(obs_source[var]).where(np.absolute(obs_source['lat'])<82)
 
@@ -1089,7 +1110,8 @@ class SatComp_Metric(object):
             for seas,ax in zip(_season_da,xaxes):
                 _ax, _im = self.standard2Dplot(var, seas.to_dataset(name=var), ax,
                                 projection=projection, bias=bias)
-                # jks here
+
+        self.share_clims(fig)
         
         cbar = fig.colorbar(_im, ax=axes.ravel().tolist())
         if bias:
@@ -1100,19 +1122,17 @@ class SatComp_Metric(object):
         yax = axes[:,0]
         xlabels = _season_da.coords['season'].values; xax = axes[0,:]
         self.add_labels(ylabels=ylabels, yaxes=yax, xlabels=xlabels, xaxes=xax)
-        
-#         self.share_ylims_2d(axes) # jks test
-        
+                
         return fig
     
     def standard2Dplot(self, var, da, ax, projection=None, bias=False, **kwargs):
         '''
         Basic workhorse plotting function. needs to handle bias and seasons
         '''
-        obs_source = self.__get_data_source(var)
+        obs_source, obs_label = self.__get_data_source(var)
         lat_lims = [-90,90]
         if projection == ccrs.NorthPolarStereo(): 
-            lat_lims = [60,90] # jks
+            lat_lims = [60,90]
             polarCentral_set_latlim(lat_lims, ax)
         if projection == ccrs.SouthPolarStereo(): 
             lat_lims = [-90,-60]
@@ -1128,7 +1148,6 @@ class SatComp_Metric(object):
                 season = val['season'].values
                 obs = season_mean(obs_source[var]).sel(season=season).where(
                                   (da['lat'] > lat_lims[0]) & (np.absolute(obs_source['lat'])<82))
-#                 print("season detected") # jks d
 
             except:
                 obs = obs_source[var].mean(dim = 'time', skipna=True).where(
@@ -1139,14 +1158,15 @@ class SatComp_Metric(object):
             val = val - obs
 
             im = val.plot(ax=ax,cmap=plt.get_cmap('bwr'),transform=ccrs.PlateCarree(),
-                          add_colorbar=False, **kwargs)
+                          add_colorbar=False, robust=True, **kwargs) #jks robust good?
         else:
             im = val.plot(ax=ax,cmap=plt.get_cmap('jet'),transform=ccrs.PlateCarree(),
-                      add_colorbar=False, **kwargs)
+                      add_colorbar=False, robust=True, **kwargs) # robust good?
+            
+        ax.set_title('') # jks test
 #             im = val.plot(ax=ax,cmap=plt.get_cmap('jet'),transform=ccrs.PlateCarree(),
 #                       add_colorbar=False, vmin=0, vmax=100, **kwargs)
-        print(val.max().values, val.min().values) # jks
-        # I will need to precompute vmax and vmin, fuck
+#         print(val.max().values, val.min().values) # jks
 
         add_map_features(ax)
                     
@@ -1154,9 +1174,9 @@ class SatComp_Metric(object):
     
     def band_biases(self, var):
         '''
-        Calculate the model bias with respect to GOCCP over 10 degree(ish) latitude bands.
+        Calculate the model bias with respect to observations over 10 degree(ish) latitude bands.
         '''
-        obs_source = self.__get_data_source(var)
+        obs_source, obs_label = self.__get_data_source(var)
         out_dict = {}
         
         # Preprocessing observational data:
@@ -1194,11 +1214,11 @@ class SatComp_Metric(object):
 #             print(_avg.values, _da['lat'])
         return out_dict
 
-    def band_bias(self, var, band_bounds):
+    def band_bias(self, var, band_bounds, season=None):
         '''
-        Calculate the model bias with respect to GOCCP over a specified latitude band.
+        Calculate the model bias with respect to observations over a specified latitude band.
         '''
-        obs_source = self.__get_data_source(var)
+        obs_source, obs_label = self.__get_data_source(var)
         out_dict = {}
         out_list = []
         # Preprocessing observational data:
@@ -1218,8 +1238,14 @@ class SatComp_Metric(object):
             _biases = []
             _run = self.cases[k]
 #             print(k)
-            _da = _run.case_da
-            _val = _da[var].mean('time', skipna=True)
+            if season:
+                _season_da = season_mean(_run.case_da[var])
+                _da = _season_da[self.seas_dict[season]].to_dataset(name=var)
+                _da = add_weights(_da)
+                _val = _da[var]
+            else:
+                _da = _run.case_da
+                _val = _da[var].mean('time', skipna=True)
             _weights = _da['cell_weight']
             _mask = np.bitwise_or(_da['lat']<=band_bounds[0], 
                                   _da['lat']>band_bounds[1])
@@ -1285,19 +1311,83 @@ class SatComp_Metric(object):
         plt.legend(lines, labels)
         plt.title('SLF trends with microphysical modifications', fontsize=24)
         
+    def cloud_polar_plot(self):
+        '''
+        This will create a polar plot to show the monthly evolution 
+        of the cloud phase breakdown. In development.
+        '''
+#                 fig, axes = plt.subplots(nrows=1, ncols=len(self.cases),
+#                                  subplot_kw=dict(polar=True), 
+#                                  figsize=[3*(len(self.cases)),5])
+        plots = []
+        for k in self.cases:
+            months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A','S','O','N','D'] # month initials
+            # Rotate and reverse so that they read clockwise from the top
+            months_dq = deque(months) 
+            months_dq.rotate(-4) 
+            months_dq = list(months_dq)
+            months_dq.reverse()
+                        
+            # Set figure size and polar projection
+            out = plt.figure(figsize =(10, 6)) 
+            ax = plt.subplot(polar = True) 
+            
+            # top is pi/2, proceed counterclockwise
+            theta = np.linspace(np.pi/2, -3/2 * np.pi, len(months)+1) # rotated and reversed
+            lines, labels = plt.thetagrids(range(0, 360, int(360/len(months_dq))), (months_dq)) 
+            # Plot observations from CALIOP-GOCCP
+            obs_da = self.goccp_data.sel(lat=slice(66,82))
+            _tot_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL'])
+            _liq_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL_LIQ'])
+            _ice_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL_ICE'])
+            _un_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL_UN'])
+            
+            obs_tot = plt.plot(theta, _tot_vals, marker='D', linestyle='dashed', color='orange')
+            obs_liq = plt.plot(theta, _liq_vals, marker='D',linestyle='dashed',color='blue')
+            obs_lice = plt.plot(theta, _liq_vals+_ice_vals, marker='D',linestyle='dashed',color='green')
+            blank=np.empty(theta.shape)
+            blank[:] = np.NaN
+            plt.plot(theta,blank,marker='D',color='gray',label='CALIOP-GOCCP')
+
+            # Plot model data from the current run
+            _run = self.cases[k]
+            _da = _run.case_da.sel(lat=slice(66,82))
+            tot_vals = self.__average_and_wrap(_da['CLDTOT_CAL'])
+            liq_vals = self.__average_and_wrap(_da['CLDTOT_CAL_LIQ'])
+            ice_vals = self.__average_and_wrap(_da['CLDTOT_CAL_ICE'])
+            un_vals = self.__average_and_wrap(_da['CLDTOT_CAL_UN'])
+#             tot_vals = np.roll(self.__average_and_wrap(_da['CLDTOT_CAL']),2)
+#             liq_vals = np.roll(self.__average_and_wrap(_da['CLDTOT_CAL_LIQ']),-2)
+#             ice_vals = np.roll(self.__average_and_wrap(_da['CLDTOT_CAL_ICE']),-2)
+#             un_vals = np.roll(self.__average_and_wrap(_da['CLDTOT_CAL_UN']),2)
+
+            plt.plot(theta, liq_vals,color='blue',linewidth=0.5)
+            plt.fill(theta, liq_vals, color='blue', alpha = 0.1, label="Liquid Cloud") #,hatch='//') 
+            plt.plot(theta, liq_vals+ice_vals,color='green',linewidth=0.5) 
+            plt.fill_between(theta, liq_vals, liq_vals+ice_vals,label="Ice Cloud",alpha=0.1,color='green')#, 'b', alpha = 0.1, label="Ice Cloud") 
+            plt.plot(theta, tot_vals,color='orange',linewidth=0.5)
+            plt.fill_between(theta, tot_vals, liq_vals+ice_vals,label="Undefined Phase",alpha=0.1,color='orange')#, 'b', alpha = 0.1, label="Ice Cloud",linewidth=0.5) 
+
+            plt.legend(loc='lower right', bbox_to_anchor=(0.8, 0., 0.5, 0.5))
+            plt.title(_run.label, fontsize=15)    
+            ax.set_rmax(100)
+            plt.show()
+            plots.append(out)
+        return out
+        
     def add_labels(self, xlabels=None, ylabels=None, xaxes=None, yaxes=None):
         try:
             for ax,label in zip(xaxes,xlabels):
                 ax.text(0.5, 1.1, label, va='bottom', ha='center',
                     rotation='horizontal', rotation_mode='anchor',
-                    transform=ax.transAxes, fontsize=15)
+                    transform=ax.transAxes, fontsize=14)
         except: pass
 
         try:
             for ax,label in zip(yaxes,ylabels):
                 ax.text(-0.2, 0.5, label, va='bottom', ha='center',
                     rotation='vertical', rotation_mode='anchor',
-                    transform=ax.transAxes)
+                    transform=ax.transAxes, fontsize=14)
         except: pass
         
     def share_ylims(self, _axes):
@@ -1321,41 +1411,59 @@ class SatComp_Metric(object):
         for ax in axes:
             ax.set_ylim([ymin,ymax])
             
-    def share_ylims_2d(self, _axes):
+        
+    def share_clims(self, figure):
         '''
-        For 2D plots. Finds the global max and min so plots share bounds and are easier 
+        For 2D plots. Finds the global max and min so plots share a colorbar and are easier 
         to interpret. In development.
         '''
-        try:
-            axes = _axes.flat # so single iteration works
-        except:
-            axes = _axes
-        
-        ymin, ymax = axes[0].get_ylim() # initialize values
-        for ax in axes[1:]:
-            _ymin, _ymax = ax.get_ylim()
-            if _ymin < ymin: 
-                ymin = _ymin
-            if _ymax > ymax: 
-                ymax = _ymax
-        
-        print('ymin: ',ymin, 'ymax: ',ymax)
-        
-#         for ax in axes:
-#             ax.set_ylim([ymin,ymax])
+        geoaxes = figure.axes
+
+        qms = [] # to store QuadMesh object
+        for i in geoaxes: # iterate over axes and find QuadMesh objects
+    #         if isinstance(i, cpy.mpl.geoaxes.GeoAxesSubplot):
+    # #             print(i.get_children())
+            for j in i.get_children():
+                if isinstance(j, mpl.collections.QuadMesh):
+                    qms.append(j)
+
+        # Calculate global min and max values
+        min,max = qms[0].get_clim() # initialize
+        for _qm in qms:
+#             print(_qm)
+            _clim = _qm.get_clim()
+            if _clim[0] < min:
+                min = _clim[0]
+            if _clim[1] > max:
+                max = _clim[1]
+
+        for _qm in qms:
+            _qm.set_clim((min, max))
     
     def __get_data_source(self, var):
         ''' Figure out if a GOCCP or CERES-EBAF variable. Return correct dataset.'''
         if var in self.goccp_data.data_vars:
             data_source = self.goccp_data
+            label = "GOCCP"
         elif var in self.ceres_data.data_vars:
             data_source = self.ceres_data
+            label = "CERES-EBAF"
         else:
             print("Could not find variable in GOCCP or CERES-EBAF datasets.")
             sys.exit() # bad?
         
-        return data_source
+        return data_source, label
             
+    def __average_and_wrap(self,da):
+        '''
+        Helper function for cloud_polar_plot
+        '''
+        _dat = da.groupby('time.month').mean() # Create monthly averages
+        _dat = _dat.mean(['lat','lon']).values # Get np.array average
+        _dat = np.append(_dat, _dat[0]) # wrap
+        
+        return _dat
+        
 class SatComp_case:
     
     def __init__(self, casedir, case):

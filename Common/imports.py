@@ -43,6 +43,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn import metrics
 
 from collections import Iterable
+from collections import deque
 #import pyaerocom as pya
 
 def load_and_reload():

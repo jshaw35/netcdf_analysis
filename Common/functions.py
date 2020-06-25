@@ -338,7 +338,8 @@ def season_mean(ds, calendar='standard'):
     np.testing.assert_allclose(weights.groupby('time.season').sum().values, np.ones(4))
 
     # Calculate the weighted average
-    return (ds * weights).groupby('time.season').sum(dim='time', min_count=1) # does not handle NaNs because of this.
+    with xr.set_options(keep_attrs=True): # jks keep attributes
+        return (ds * weights).groupby('time.season').sum(dim='time', min_count=1) # does not handle NaNs because of this.
 
 
 def leap_year(year, calendar='standard'):
