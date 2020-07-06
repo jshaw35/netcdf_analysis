@@ -27,6 +27,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.path as mpath
 import matplotlib.gridspec as gridspec
+import matplotlib.lines as mlines
+
 from matplotlib.colors import LogNorm
 from mpl_toolkits.mplot3d import Axes3D
 

@@ -208,7 +208,7 @@ class CT_SLF_Metric(object):
                
         labels = ['CALIOP SLF']
         lines = [_line] 
-        for i,color in zip(self.cases, self.colors): # [3:]
+        for i,color in zip(self.cases, self.colors): # [3:] jks
             _run = self.cases[i]
             _case = _run.case_da
             
@@ -227,7 +227,6 @@ class CT_SLF_Metric(object):
             _line = plt.scatter(slf_ct, slf_ct['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_ct), color=color, marker='D')
             
             # Bulk SLF part
-            # handle one-month runs here
             if season: # handle looking at specific seasons
                 _case['SLF_ISOTM'] = season_mean(_case['SLFXCLD_ISOTM'] / _case['CLD_ISOTM']).sel(season=season)
             else:
@@ -610,6 +609,11 @@ class SatComp_Metric(object):
         
         self.seas_dict = {"DJF":0,"JJA":1,"MAM":2,"SON":3}
         
+        self.var_label_dict = {'CLDTOT_CAL':'Total Cloud \n Fraction (%)', 
+                               'CLDTOT_CAL_LIQ':'Liquid Cloud \n Fraction (%)',
+                               'CLDTOT_CAL_ICE':'Ice Cloud \n Fraction (%)'}
+        
+        
     def __load_GOCCP_data(self):
         '''
         Load GOCCP data for model comparison. Relabel variables to match model output.
@@ -784,17 +788,21 @@ class SatComp_Metric(object):
 #         fig, axes = plt.subplots(nrows=len(varlist),ncols=1,figsize=[10,2*len(varlist)])
 
         fig, axes = plt.subplots(nrows=1,ncols=len(varlist),figsize=[15,5])
-        obs_source, obs_label = self.__get_data_source(varlist[0])            
+        obs_source, obs_label = self.__get_data_source(varlist[0])
         
         if bias:
             labels = self.case_labels
         else:
             labels = [obs_label] + self.case_labels
         
+        obs_da = obs_source
         for var,ax in zip(varlist,axes):
             if not bias:
-                self.__standard1Dplot(var, obs_source,ax,bias=False,
-                                      lat_range=lat_range, label=obs_label) # does this handle season? jks
+                if season:
+                    _season_da = season_mean(obs_source[var]).where(np.absolute(obs_source['lat'])<82)
+                    obs_da = _season_da[self.seas_dict[season]].to_dataset(name=var)
+                self.__standard1Dplot(var, obs_da, ax, bias=False, lat_range=lat_range, 
+                                      label=obs_label)
             
             for k in self.cases:
                 _run = self.cases[k]
@@ -986,10 +994,11 @@ class SatComp_Metric(object):
             ylabels = [obs_label] + self.case_labels
             
             # jks handle season
+            obs_da = obs_source
             if season:
                 _season_da = season_mean(obs_source[var]).where(np.absolute(obs_source['lat'])<82)
-                obs_source = _season_da[self.seas_dict[season]].to_dataset(name=var)
-            self.standard2Dplot(var, obs_source, axes.flat[0],
+                obs_da = _season_da[self.seas_dict[season]].to_dataset(name=var)
+            self.standard2Dplot(var, obs_da, axes.flat[0],
                                 projection=projection, bias=False)
             _axes = axes.flat[1:]
         
@@ -1039,6 +1048,7 @@ class SatComp_Metric(object):
                            projection=projection, figsize=[15,2*(len(self.cases)+1)])
             ylabels = [obs_label] + self.case_labels
             
+        obs_da = obs_source
         for var,varax in zip(varlist,axes.transpose()):
             # Plot observational data, always the raw data (not bias)
             if bias:
@@ -1046,9 +1056,9 @@ class SatComp_Metric(object):
             else:
                 if season:
                     _season_da = season_mean(obs_source[var]).where(np.absolute(obs_source['lat'])<82)
-                    obs_source = _season_da[self.seas_dict[season]].to_dataset(name=var)
+                    obs_da = _season_da[self.seas_dict[season]].to_dataset(name=var)
                     
-                _ax, _im = self.standard2Dplot(var, obs_source, varax[0],
+                _ax, _im = self.standard2Dplot(var, obs_da, varax[0],
                                 projection=projection, bias=False)
                 case_ax = varax[1:]
                 
@@ -1066,7 +1076,14 @@ class SatComp_Metric(object):
                                                bias=bias)
         
         yax = axes[:,0]
-        xlabels = varlist; xax = axes[0,:]
+        xlabels = []
+        for i in varlist: # jks improve labelling with self.var_label_dict
+            try:
+                xlabels.append(self.var_label_dict[i])
+            except:
+                xlabels.append(i)
+                
+        xax = axes[0,:]
         self.add_labels(ylabels=ylabels, yaxes=yax, xlabels=xlabels, xaxes=xax)
 
         self.share_clims(fig)
@@ -1163,10 +1180,10 @@ class SatComp_Metric(object):
             im = val.plot(ax=ax,cmap=plt.get_cmap('jet'),transform=ccrs.PlateCarree(),
                       add_colorbar=False, robust=True, **kwargs) # robust good?
             
-        ax.set_title('') # jks test
+        ax.set_title('')
 #             im = val.plot(ax=ax,cmap=plt.get_cmap('jet'),transform=ccrs.PlateCarree(),
 #                       add_colorbar=False, vmin=0, vmax=100, **kwargs)
-#         print(val.max().values, val.min().values) # jks
+
 
         add_map_features(ax)
                     
@@ -1310,38 +1327,36 @@ class SatComp_Metric(object):
         plt.ylabel('Isotherm (C)', fontsize=18)
         plt.legend(lines, labels)
         plt.title('SLF trends with microphysical modifications', fontsize=24)
-        
-    def cloud_polar_plot(self):
+
+
+    def cloud_polar_plot(self, lat_range=[66,82]):
         '''
         This will create a polar plot to show the monthly evolution 
         of the cloud phase breakdown. In development.
         '''
-#                 fig, axes = plt.subplots(nrows=1, ncols=len(self.cases),
-#                                  subplot_kw=dict(polar=True), 
-#                                  figsize=[3*(len(self.cases)),5])
-        plots = []
-        for k in self.cases:
-            months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A','S','O','N','D'] # month initials
-            # Rotate and reverse so that they read clockwise from the top
-            months_dq = deque(months) 
-            months_dq.rotate(-4) 
-            months_dq = list(months_dq)
-            months_dq.reverse()
-                        
-            # Set figure size and polar projection
-            out = plt.figure(figsize =(10, 6)) 
-            ax = plt.subplot(polar = True) 
-            
-            # top is pi/2, proceed counterclockwise
-            theta = np.linspace(np.pi/2, -3/2 * np.pi, len(months)+1) # rotated and reversed
+        fig = plt.figure(figsize=[6*(len(self.cases)),10],dpi=200)
+        months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A','S','O','N','D'] # month initials
+        # Rotate and reverse so that they read clockwise from the top
+        months_dq = deque(months) 
+        months_dq.rotate(-4) 
+        months_dq = list(months_dq)
+        months_dq.reverse()
+        
+        # Process CALIOP_GOCCP
+        obs_da = self.goccp_data.sel(lat=slice(lat_range[0],lat_range[1]))
+        _tot_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL'])
+        _liq_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL_LIQ'])
+        _ice_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL_ICE'])
+        _un_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL_UN'])
+        
+        # top is pi/2, proceed counterclockwise
+        theta = np.linspace(np.pi/2, -3/2 * np.pi, len(months)+1) # rotated and reversed
+        for i,k in enumerate(self.cases):
+            ax = fig.add_subplot(1,len(self.cases),i+1, projection='polar')
+        
             lines, labels = plt.thetagrids(range(0, 360, int(360/len(months_dq))), (months_dq)) 
+
             # Plot observations from CALIOP-GOCCP
-            obs_da = self.goccp_data.sel(lat=slice(66,82))
-            _tot_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL'])
-            _liq_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL_LIQ'])
-            _ice_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL_ICE'])
-            _un_vals = self.__average_and_wrap(obs_da['CLDTOT_CAL_UN'])
-            
             obs_tot = plt.plot(theta, _tot_vals, marker='D', linestyle='dashed', color='orange')
             obs_liq = plt.plot(theta, _liq_vals, marker='D',linestyle='dashed',color='blue')
             obs_lice = plt.plot(theta, _liq_vals+_ice_vals, marker='D',linestyle='dashed',color='green')
@@ -1351,15 +1366,12 @@ class SatComp_Metric(object):
 
             # Plot model data from the current run
             _run = self.cases[k]
-            _da = _run.case_da.sel(lat=slice(66,82))
+            _da = _run.case_da.sel(lat=slice(lat_range[0],lat_range[1]))
             tot_vals = self.__average_and_wrap(_da['CLDTOT_CAL'])
             liq_vals = self.__average_and_wrap(_da['CLDTOT_CAL_LIQ'])
             ice_vals = self.__average_and_wrap(_da['CLDTOT_CAL_ICE'])
             un_vals = self.__average_and_wrap(_da['CLDTOT_CAL_UN'])
 #             tot_vals = np.roll(self.__average_and_wrap(_da['CLDTOT_CAL']),2)
-#             liq_vals = np.roll(self.__average_and_wrap(_da['CLDTOT_CAL_LIQ']),-2)
-#             ice_vals = np.roll(self.__average_and_wrap(_da['CLDTOT_CAL_ICE']),-2)
-#             un_vals = np.roll(self.__average_and_wrap(_da['CLDTOT_CAL_UN']),2)
 
             plt.plot(theta, liq_vals,color='blue',linewidth=0.5)
             plt.fill(theta, liq_vals, color='blue', alpha = 0.1, label="Liquid Cloud") #,hatch='//') 
@@ -1368,12 +1380,69 @@ class SatComp_Metric(object):
             plt.plot(theta, tot_vals,color='orange',linewidth=0.5)
             plt.fill_between(theta, tot_vals, liq_vals+ice_vals,label="Undefined Phase",alpha=0.1,color='orange')#, 'b', alpha = 0.1, label="Ice Cloud",linewidth=0.5) 
 
-            plt.legend(loc='lower right', bbox_to_anchor=(0.8, 0., 0.5, 0.5))
             plt.title(_run.label, fontsize=15)    
             ax.set_rmax(100)
-            plt.show()
-            plots.append(out)
-        return out
+        plt.legend(loc='lower right', bbox_to_anchor=(0.8, -0.1, 0.5, 0.5))
+        return fig
+    
+    def plot_cloud_sum(self, bias=False, season=None):
+        '''
+        Latitude plot of cloud phase components.
+        '''
+        fig, axes = plt.subplots(nrows=1,ncols=len(self.cases),figsize=[15,4])
+
+        obs_da = self.goccp_data
+        obs_handle = mlines.Line2D([], [], linestyle='dashed', color='gray', label='CALIOP-GOCCP')
+        if season:
+            obs_cldtot = self.__seasonalize_for_sum(obs_da, 'CLDTOT_CAL', season)
+            obs_cldliq = self.__seasonalize_for_sum(obs_da, 'CLDTOT_CAL_LIQ', season)
+            obs_cldice = self.__seasonalize_for_sum(obs_da, 'CLDTOT_CAL_ICE', season)
+            
+            handles = []
+            
+        else:
+            obs_cldtot = obs_da['CLDTOT_CAL'].mean(['time','lon'])
+            obs_cldliq = obs_da['CLDTOT_CAL_LIQ'].mean(['time','lon'])
+            obs_cldice = obs_da['CLDTOT_CAL_ICE'].mean(['time','lon'])
+
+        for k,ax in zip(self.cases,axes):
+            _run = self.cases[k]
+            _da = _run.case_da
+            
+            if season:
+                _cldtot = self.__seasonalize_for_sum(_da, 'CLDTOT_CAL', season)
+                _cldliq = self.__seasonalize_for_sum(_da, 'CLDTOT_CAL_LIQ', season)
+                _cldice = self.__seasonalize_for_sum(_da, 'CLDTOT_CAL_ICE', season)
+            else:
+                _cldtot = _da['CLDTOT_CAL'].mean(['time','lon'])
+                _cldliq = _da['CLDTOT_CAL_LIQ'].mean(['time','lon'])
+                _cldice = _da['CLDTOT_CAL_ICE'].mean(['time','lon'])
+
+            # Plot model output
+            ax.plot(_cldliq['lat'], _cldliq, color='blue',linewidth=0.5)
+            liq_fill = ax.fill_between(_cldliq['lat'], _cldliq, np.zeros(_cldliq.shape), color='blue', alpha = 0.1, label="Liquid Cloud")
+            ax.plot(_cldice['lat'], _cldice+_cldliq,color='green',linewidth=0.5) 
+            lice_fill = ax.fill_between(_cldliq['lat'], _cldliq, _cldice+_cldliq, label="Ice Cloud",alpha=0.1,color='green')
+            ax.plot(_cldtot['lat'], _cldtot,color='orange',linewidth=0.5) 
+            un_fill = ax.fill_between(_cldliq['lat'], _cldice+_cldliq, _cldtot, label="Undefined Phase",alpha=0.1,color='orange')
+
+            # Plot observations
+            obs_tot = ax.plot(obs_cldtot['lat'], obs_cldtot, linestyle='dashed', color='orange')
+            obs_liq = ax.plot(obs_cldliq['lat'], obs_cldliq, linestyle='dashed',color='blue')
+            obs_lice = ax.plot(obs_cldliq['lat'], obs_cldliq+obs_cldice, linestyle='dashed',color='green')
+            blank=np.empty(obs_cldliq['lat'].shape)
+            blank[:] = np.NaN
+            obs_fill = ax.plot(obs_cldtot['lat'], blank, linestyle='dashed', color='gray', label='CALIOP-GOCCP')
+
+        handles = [obs_handle, liq_fill, lice_fill, un_fill]
+
+        ylabels = ['Cloud Cover (%)']; yax = [axes[0]]
+        xlabels = self.case_labels; xax = axes
+        self.add_labels(xlabels=xlabels, xaxes=xax, ylabels=ylabels, yaxes=yax)
+        
+#         plt.legend(handles=handles)
+        plt.legend(handles=handles,loc='lower right', bbox_to_anchor=(0.8, -0.1, 0.5, 0.5))
+
         
     def add_labels(self, xlabels=None, ylabels=None, xaxes=None, yaxes=None):
         try:
@@ -1463,6 +1532,14 @@ class SatComp_Metric(object):
         _dat = np.append(_dat, _dat[0]) # wrap
         
         return _dat
+    
+    def __seasonalize_for_sum(self, da, var, season):
+        ''' Helper function for plot_cloud_sum'''
+        season_da = season_mean(da[var])#.where(np.absolute(da[var]['lat'])<82)
+        var_da = season_da[self.seas_dict[season]].to_dataset(name=var) # select correct season and revert to da
+        out = var_da[var].mean('lon')
+            
+        return out
         
 class SatComp_case:
     
