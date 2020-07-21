@@ -339,7 +339,7 @@ def season_mean(ds, calendar='standard'):
 
     # Calculate the weighted average
     with xr.set_options(keep_attrs=True): # jks keep attributes
-        return (ds * weights).groupby('time.season').sum(dim='time', min_count=1) # does not handle NaNs because of this.
+        return (ds * weights).groupby('time.season').sum(dim='time', min_count=1)
 
 
 def leap_year(year, calendar='standard'):
@@ -403,3 +403,18 @@ def share_ylims(axes):
                 
     for ax in axes:
         ax.set_ylim([ymin,ymax])
+        
+def to_png(file, filename):
+    '''
+    Simple function for one-line saving.
+    '''
+    output_dir = 'figures/'
+    ext = 'png'
+    full_path = '%s%s.%s' % (output_dir,filename,ext)
+
+    if not os.path.exists(output_dir + filename):
+        file.savefig(full_path,format = 'png', dpi = 200)
+#         file.clf()
+        
+    else:
+        print('File already exists, rename or delete.')
