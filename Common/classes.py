@@ -174,8 +174,15 @@ class CT_SLF_Metric(object):
                                
         return isos_plot
     
-    def plot_isos_all(self, lat_range=[66.667,82],season=None):        
-        isos_plot = plt.figure(figsize=[10,10])
+    def plot_isos_all(self, lat_range=[66.667,82],season=None, **kwargs):        
+#         isos_plot = plt.figure(figsize=[10,10])
+#         print(kwargs['ax'])
+        try:
+#             kwargs['ax'].invert_yaxis()
+            plt.sca(kwargs['ax'])
+            isos_plot = None
+        except: 
+            isos_plot = plt.figure(figsize=[10,10])
         plt.gca().invert_yaxis()
 
         if season: # handle looking at specific seasons
@@ -196,7 +203,7 @@ class CT_SLF_Metric(object):
         ic_caliop_slf = 100*masked_average(ic_slf['SLF'], dim=['lat','lon'], weights=ic_caliop_weight, mask=ic_caliop_mask)
         ic_caliop_stdev = 100*np.std(ic_slf['SLF'].sel(
                                      lat=slice(lat_range[0],lat_range[1])),axis=(0,1))
-        plt.errorbar(ic_caliop_slf, ic_caliop_slf['isotherm'], xerr=ic_caliop_stdev, label='CALIOP SLF IC', fmt='o-', color = 'black', zorder=0)
+        ic_line = plt.errorbar(ic_caliop_slf, ic_caliop_slf['isotherm'], xerr=ic_caliop_stdev, label='CALIOP SLF IC', fmt='o-', color='black', zorder=0, linestyle='dashed') # (0,(5,1)) '--'
         
         
         caliop_weight = ct_slf['cell_weight']
@@ -204,10 +211,10 @@ class CT_SLF_Metric(object):
                                     ct_slf['lat']>lat_range[1])
         caliop_slf = 100*masked_average(ct_slf['SLF'], dim=['lat','lon'], weights=caliop_weight, mask=caliop_mask)
         caliop_stdev = 100*np.std(ct_slf['SLF'].sel(lat=slice(lat_range[0],lat_range[1])), axis=(0,1))
-        _line = plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', fmt='o', color = 'black', zorder=0, linestyle='-', marker='D')
+        _line = plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', color = 'black', zorder=0, linestyle='-', marker='D')# fmt='o',
                
-        labels = ['CALIOP SLF']
-        lines = [_line] 
+        labels = ['CALIOP Cloudtop SLF','CALIOP Cloudbulk SLF']
+        lines = [_line, ic_line] 
         for i,color in zip(self.cases, self.colors): # [3:] jks
             _run = self.cases[i]
             _case = _run.case_da
@@ -242,7 +249,7 @@ class CT_SLF_Metric(object):
         plt.xlim([-5,105])    
         plt.xlabel('SLF (%)', fontsize=18)
         plt.ylabel('Isotherm (C)', fontsize=18)
-        plt.legend(lines, labels)
+        plt.legend(lines, labels) # jks
         plt.title('SLF trends with microphysical modifications', fontsize=24)
         
         return isos_plot
@@ -601,6 +608,7 @@ class SatComp_Metric(object):
             'toa_sw_clr_t_mon':'FSNTC','toa_lw_clr_t_mon':'FLNTC', # not totally sure about t or c here
             'toa_cre_sw_mon':'SWCF','toa_cre_lw_mon':'LWCF',
             'sfc_lw_down_all_mon':'FLDS','sfc_sw_down_all_mon':'FSDS',
+            'sfc_net_sw_all_mon':'FSNS','sfc_net_lw_all_mon':'FLNS'
 
 #             'toa_net_all_mon':'FNNTOA','toa_net_clr_c_mon':'FNNTOAC'
         }
@@ -1485,8 +1493,13 @@ class SatComp_Metric(object):
 #         plt.legend(handles=handles)
         plt.legend(handles=handles,loc='lower right', bbox_to_anchor=(0.8, -0.1, 0.5, 0.5))
 
-    def plot_months_line(self, var, lat_range=[66,82], bias=False):
-        fig, axes = plt.subplots(nrows=1,ncols=1,figsize=[15,10])
+    def plot_months_line(self, var, lat_range=[66,82], bias=False, **kwargs):
+        try:
+            axes = kwargs['ax']
+            plt.sca(kwargs['ax'])
+            fig=None
+        except:
+            fig, axes = plt.subplots(nrows=1,ncols=1,figsize=[15,10])            
                 
         obs_source, obs_label = self.__get_data_source(var)
         obs_source = obs_source.sel(lat=slice(lat_range[0],lat_range[1]))
@@ -1503,7 +1516,7 @@ class SatComp_Metric(object):
             mon_vals.plot(ax=axes,label=_run.label, color=color)
             
         plt.xticks(np.arange(1,len(self.months)+1,1), self.months)
-        plt.legend()
+#         plt.legend() # jks
         
         return fig
         
