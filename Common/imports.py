@@ -51,6 +51,8 @@ from collections import Iterable
 from collections import deque
 #import pyaerocom as pya
 
+import re # regular expressions
+
 def load_and_reload():
     '''
     the code below automatically reload modules that

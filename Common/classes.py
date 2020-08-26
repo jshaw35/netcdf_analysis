@@ -1516,7 +1516,7 @@ class SatComp_Metric(object):
             mon_vals.plot(ax=axes,label=_run.label, color=color)
             
         plt.xticks(np.arange(1,len(self.months)+1,1), self.months)
-#         plt.legend() # jks
+        plt.legend() # jks
         
         return fig
         
