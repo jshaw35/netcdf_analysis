@@ -19,12 +19,6 @@
 # ## Necessary Imports
 
 # +
-from dask.distributed import Client
-
-client = Client("tcp://127.0.0.1:38201")
-client
-
-# +
 import sys
 # Add common resources folder to path
 sys.path.append("/mnt/mcc-ns9600k/jonahks/git_repos/netcdf_analysis/Common/")
@@ -73,13 +67,14 @@ print('Can access all directory paths:', access_paths)
 
 # List case to choose one of interest
 
-all_cases = os.listdir('mnth15runs//')
+all_cases = os.listdir('mnth15runs/')
+all_cases.sort()
 all_cases
 
 # Pick run to analyze
 
 # +
-case = '20200220_105217_singleparam_cam61_wbf_1_inp_0.01'
+case = '20200323_170403_singleparam_cam6_fit_wbf_0.3_inp_100'
 
 run_dir = 'mnth15runs/%s/' % case # inconsistent label compared to jupy_test
 #run_dir = 'inp_validation/%s' % case

@@ -91,7 +91,10 @@ def add_map_features(ax):
     gl.xlabels_top = False
     gl.ylabels_right = False
     
-    
+
+def sp_map(*nrs, projection = ccrs.PlateCarree(), **kwargs):
+    return plt.subplots(*nrs, subplot_kw={'projection':projection}, **kwargs)
+
 def interpretNS(stringin):
     '''
     Interprets the string name of CALIOP longitudinally 
@@ -112,9 +115,6 @@ def interpretNS(stringin):
     weight = np.cos(np.pi/180*avg_lat)
     
     return weight, min([low, high]), max([low,high])
-
-def sp_map(*nrs, projection = ccrs.PlateCarree(), **kwargs):
-    return plt.subplots(*nrs, subplot_kw={'projection':projection}, **kwargs)
 
 
 def select_loc_to_pandas(dataset, coords):
@@ -203,19 +203,28 @@ def plot_slf_isotherms(ds, var=None, isovar=None):
 def add_weights(ds):
     '''
     Add variable to ds for weighting of lat,lon variables
+    Update to only require existing "lat" and "lon" variables. 
     '''
-    gw = ds['gw']    
+    
+    lat = ds['lat']
+    lon = ds['lon']
+    
+    _ones = xr.ones_like(lon)
+    _gw = np.cos(lat*np.pi/180)
+    ds['cell_weight'] = (_gw @ _ones) / _gw.sum()
+    
+#     gw = ds['gw']    
 
-#    _wgs = ds['TS'].copy().mean(dim = 'time', skipna=True)
-    try:
-        _wgs = ds['TS'].isel(time = 0).copy()
-    except:
-        _wgs = ds['TS'].copy()
-    _wgs = (_wgs * 0 + 1) * gw # copy gw into the 2d array
-    _wgs = _wgs / np.sum(_wgs)  # Normalize
-    _wgs.name = 'cell_weight'
+# #    _wgs = ds['TS'].copy().mean(dim = 'time', skipna=True)
+#     try:
+#         _wgs = ds['TS'].isel(time = 0).copy()
+#     except:
+#         _wgs = ds['TS'].copy() # this is throwing an error
+#     _wgs = (_wgs * 0 + 1) * gw # copy gw into the 2d array
+#     _wgs = _wgs / np.sum(_wgs)  # Normalize
+#     _wgs.name = 'cell_weight'
 
-    ds['cell_weight'] = _wgs
+#     ds['cell_weight'] = _wgs
     
     return ds
 
@@ -311,3 +320,101 @@ def regress_1d(xdata, ydata):
     regressor = LinearRegression().fit(x, y)
     
     return regressor
+
+# Weighting function from http://xarray.pydata.org/en/stable/examples/monthly-means.html
+# Now handles NaNs (by min_count=1)
+def season_mean(ds, calendar='standard'):
+    # Make a DataArray of season/year groups
+    year_season = xr.DataArray(ds.time.to_index().to_period(freq='Q-NOV').to_timestamp(how='E'),
+                               coords=[ds.time], name='year_season')
+
+    # Make a DataArray with the number of days in each month, size = len(time)
+    month_length = xr.DataArray(get_dpm(ds.time.to_index(), calendar=calendar),
+                                coords=[ds.time], name='month_length')
+    # Calculate the weights by grouping by 'time.season'
+    weights = month_length.groupby('time.season') / month_length.groupby('time.season').sum()
+
+    # Test that the sum of the weights for each season is 1.0
+    np.testing.assert_allclose(weights.groupby('time.season').sum().values, np.ones(4))
+
+    # Calculate the weighted average
+    with xr.set_options(keep_attrs=True): # jks keep attributes
+        return (ds * weights).groupby('time.season').sum(dim='time', min_count=1)
+
+
+def leap_year(year, calendar='standard'):
+    """Determine if year is a leap year"""
+    leap = False
+    if ((calendar in ['standard', 'gregorian',
+        'proleptic_gregorian', 'julian']) and
+        (year % 4 == 0)):
+        leap = True
+        if ((calendar == 'proleptic_gregorian') and
+            (year % 100 == 0) and
+            (year % 400 != 0)):
+            leap = False
+        elif ((calendar in ['standard', 'gregorian']) and
+                 (year % 100 == 0) and (year % 400 != 0) and
+                 (year < 1583)):
+            leap = False
+    return leap
+
+def get_dpm(time, calendar='standard'):
+    """
+    return a array of days per month corresponding to the months provided in `months`
+    """
+    
+    dpm = {'noleap': [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+       '365_day': [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+       'standard': [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+       'gregorian': [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+       'proleptic_gregorian': [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+       'all_leap': [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+       '366_day': [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+       '360_day': [0, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30]}
+    
+    month_length = np.zeros(len(time), dtype=np.int)
+
+    cal_days = dpm[calendar]
+
+    for i, (month, year) in enumerate(zip(time.month, time.year)):
+        month_length[i] = cal_days[month]
+        if leap_year(year, calendar=calendar) and month == 2:
+            month_length[i] += 1
+    return month_length
+
+def share_ylims(axes):
+    '''
+    For 1D plots. Finds the global max and min so plots share bounds and are easier 
+    to interpret.
+    '''
+    try:
+        axes = axes.flat # so single iteration works
+    except:
+        axes = axes
+        
+    ymin, ymax = axes[0].get_ylim() # initialize values
+    for ax in axes[1:]:
+        _ymin, _ymax = ax.get_ylim()
+        if _ymin < ymin: 
+            ymin = _ymin
+        if _ymax > ymax: 
+            ymax = _ymax
+                
+    for ax in axes:
+        ax.set_ylim([ymin,ymax])
+        
+def to_png(file, filename):
+    '''
+    Simple function for one-line saving.
+    '''
+    output_dir = 'figures/'
+    ext = 'png'
+    full_path = '%s%s.%s' % (output_dir,filename,ext)
+
+    if not os.path.exists(output_dir + filename):
+        file.savefig(full_path,format = 'png', dpi = 200)
+#         file.clf()
+        
+    else:
+        print('File already exists, rename or delete.')
