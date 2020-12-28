@@ -29,7 +29,11 @@ class CT_SLF_Metric(object):
         self.cases = {}
         self.time_steps = time_steps
         self.month = sel_month
-        self.colors = ['red','orange','yellow','green','blue','purple','pink']
+#         self.colors = ['red','orange','yellow','green','blue','purple','pink']
+#         self.colors = ['purple','red','orange','yellow','green','blue','pink']
+#         self.colors = ['blue','darkorange','green','orange','yellow','green','blue','pink']
+        self.colors = sns.color_palette("colorblind")
+
         self.seas_dict = {"DJF":0,"JJA":1,"MAM":2,"SON":3}
         
         try:
@@ -232,6 +236,7 @@ class CT_SLF_Metric(object):
             rms_ct = np.sqrt(np.mean(np.square(err)))
 
             _line = plt.scatter(slf_ct, slf_ct['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_ct), color=color, marker='D')
+            _line2 = plt.plot(slf_ct, slf_ct['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_ct), color=color, linestyle='-')
             
             # Bulk SLF part
             if season: # handle looking at specific seasons
@@ -244,12 +249,13 @@ class CT_SLF_Metric(object):
             rms_bulk = np.sqrt(np.mean(np.square(err)))
             
             plt.scatter(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color)
+            plt.plot(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color,linestyle='dashed')
             labels.append(_run.label+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
             lines.append(_line)
         plt.xlim([-5,105])    
         plt.xlabel('SLF (%)', fontsize=18)
         plt.ylabel('Isotherm (C)', fontsize=18)
-        plt.legend(lines, labels) # jks
+        plt.legend(lines, labels, loc='lower left') # jks
         plt.title('SLF trends with microphysical modifications', fontsize=24)
         
         return isos_plot
@@ -547,7 +553,8 @@ class SatComp_Metric(object):
             self.case_dir = casedir
             self.cases = {}
             self.case_labels = []
-            self.colors = ['red','orange','yellow','green','blue','purple','pink']
+            self.colors = sns.color_palette("colorblind")
+#             self.colors = ['red','orange','yellow','green','blue','purple','pink']
             self.__addlistsanddicts()
             
 #             self.__load_GOCCP_data()
@@ -1128,11 +1135,13 @@ class SatComp_Metric(object):
         self.share_clims(fig)
         plt.subplots_adjust(wspace=0.1, hspace=0.1)
         
-        cbar = fig.colorbar(_im, ax=axes.ravel().tolist())
+        cbar = fig.colorbar(_im, ax=axes.ravel().tolist()) 
+        # ^does this work after the _im object has been modified by share_clims? 
+        # Yes, it does!
         if bias:
             cbar.set_label("Bias (Model - Observations)")
             
-        return fig
+        return fig, cbar
     
     def __seasonalplotwrapper(self, var, projection, bias=False, **kwargs):
         '''
@@ -1493,13 +1502,14 @@ class SatComp_Metric(object):
 #         plt.legend(handles=handles)
         plt.legend(handles=handles,loc='lower right', bbox_to_anchor=(0.8, -0.1, 0.5, 0.5))
 
-    def plot_months_line(self, var, lat_range=[66,82], bias=False, **kwargs):
-        try:
-            axes = kwargs['ax']
-            plt.sca(kwargs['ax'])
+    def plot_months_line(self, var, lat_range=[66,82], bias=False, ax=None, **kwargs):
+            
+        if ax:
+            axes = ax
+            plt.sca(ax)
             fig=None
-        except:
-            fig, axes = plt.subplots(nrows=1,ncols=1,figsize=[15,10])            
+        else:
+            fig, axes = plt.subplots(nrows=1,ncols=1,figsize=[15,10])
                 
         obs_source, obs_label = self.__get_data_source(var)
         obs_source = obs_source.sel(lat=slice(lat_range[0],lat_range[1]))
@@ -1507,16 +1517,22 @@ class SatComp_Metric(object):
         if not bias:
             obs_vals.plot(ax=axes,label=obs_label, color='black')
         
+        lines = []
+        labels = []
         for k,color in zip(self.cases,self.colors):
             _run = self.cases[k]
             _da = _run.case_da.sel(lat=slice(lat_range[0],lat_range[1]))
             mon_vals = self.__average_and_wrap(_da[var],wrap=False)
             if bias:
                 mon_vals = mon_vals - obs_vals
-            mon_vals.plot(ax=axes,label=_run.label, color=color)
+            _ln = mon_vals.plot(ax=axes,label=_run.label, color=color, **kwargs)
+            _lbl = _run.label
+            
+#             lines.append(_ln)
+            labels.append(_lbl)
             
         plt.xticks(np.arange(1,len(self.months)+1,1), self.months)
-        plt.legend() # jks
+        plt.legend(labels) # JKS
         
         return fig
         
@@ -1559,8 +1575,8 @@ class SatComp_Metric(object):
         
     def share_clims(self, figure):
         '''
-        For 2D plots. Finds the global max and min so plots share a colorbar and are easier 
-        to interpret. In development.
+        For 2D plots. Finds the global max and min so plots share a colorbar 
+        and are easier to interpret. In development.
         '''
         geoaxes = figure.axes
 
@@ -1580,7 +1596,11 @@ class SatComp_Metric(object):
                 min = _clim[0]
             if _clim[1] > max:
                 max = _clim[1]
-
+        
+        # Extend by 10% (testing) JKS
+        min = 1.1*min
+        max = 1.1*max
+                
         for _qm in qms:
             _qm.set_clim((min, max))
     
