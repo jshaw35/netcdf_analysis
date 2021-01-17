@@ -39,10 +39,6 @@ def masked_average(xa:xr.DataArray,
     return xa_weighted_average
 
 
-
-    # %% [markdown]
-
-
 def __weighted_average(dim, weights, xa, xa_copy):
     '''helper function for unmasked_average'''
     _, weights_all_dims = xr.broadcast(xa, weights)  # broadcast to all dims
@@ -51,6 +47,7 @@ def __weighted_average(dim, weights, xa, xa_copy):
     x_tot = weights_all_dims.where(xa_copy.notnull()).sum(dim=dim)
     xa_weighted_average = xw_sum / x_tot
     return xa_weighted_average
+
 
 # I want to retain the metadata
 def __weighted_average_with_mask(dim, mask, weights, xa, xa_copy):
@@ -309,7 +306,7 @@ def noresm_slf_to_df(ds, slf_files):
     
     return df
 
-def regress_1d(xdata, ydata):
+def regress_1d(xdata, ydata, **kwargs):
     '''
     Returns an sklearn regression object trained on the passed data.
     Might be generalizable to higher dimensions.
@@ -317,7 +314,7 @@ def regress_1d(xdata, ydata):
     x = np.array(xdata).reshape(-1,1)
     y = np.array(ydata).reshape(-1,1)
     
-    regressor = LinearRegression().fit(x, y)
+    regressor = LinearRegression(**kwargs).fit(x, y)
     
     return regressor
 
@@ -418,3 +415,54 @@ def to_png(file, filename):
         
     else:
         print('File already exists, rename or delete.')
+        
+def average_and_wrap(da,wrap=True):
+        '''
+        Helper function for cloud_polar_plot
+        '''
+        dat = da.groupby('time.month').mean() # Create monthly averages
+#         _dat = _dat.mean(['lat','lon'])#.values # Get np.array average, ! JKS use masked average
+
+        dat2 = add_weights(dat)
+        _weights = dat2['cell_weight']
+            
+        out_dat = masked_average(dat2, dim=['lat','lon'], weights=_weights)
+        
+        if wrap:
+            out_dat = np.append(out_dat, out_dat[0]) # wrap
+        
+        return _dat
+    
+def mute_ax(ax):
+    ax.set_ylabel('')
+    ax.set_xlabel('')
+    ax.set_title('')
+    ax.legend().set_visible(False)
+    
+# def align_yaxis(ax1, v1, ax2, v2):
+#     """adjust ax2 ylimit so that v2 in ax2 is aligned to v1 in ax1"""
+#     _, y1 = ax1.transData.transform((0, v1))
+#     _, y2 = ax2.transData.transform((0, v2))
+#     inv = ax2.transData.inverted()
+#     _, dy = inv.transform((0, 0)) - inv.transform((0, y1-y2))
+#     miny, maxy = ax2.get_ylim()
+#     ax2.set_ylim(miny+dy, maxy+dy)
+
+def align_yaxis(ax1, ax2):
+    y_lims = np.array([ax.get_ylim() for ax in [ax1, ax2]])
+
+    # force 0 to appear on both axes, comment if don't need
+    y_lims[:, 0] = y_lims[:, 0].clip(None, 0)
+    y_lims[:, 1] = y_lims[:, 1].clip(0, None)
+
+    # normalize both axes
+    y_mags = (y_lims[:,1] - y_lims[:,0]).reshape(len(y_lims),1)
+    y_lims_normalized = y_lims / y_mags
+
+    # find combined range
+    y_new_lims_normalized = np.array([np.min(y_lims_normalized), np.max(y_lims_normalized)])
+
+    # denormalize combined range to get new axes
+    new_lim1, new_lim2 = y_new_lims_normalized * y_mags
+    ax1.set_ylim(new_lim1)
+    ax2.set_ylim(new_lim2)

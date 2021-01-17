@@ -250,12 +250,13 @@ class CT_SLF_Metric(object):
             
             plt.scatter(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color)
             plt.plot(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color,linestyle='dashed')
-            labels.append(_run.label+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
+            labels.append(_run.label+' (%.2f, %.2f)' % (rms_ct, rms_bulk))
+#             labels.append(_run.label+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
             lines.append(_line)
         plt.xlim([-5,105])    
         plt.xlabel('SLF (%)', fontsize=18)
         plt.ylabel('Isotherm (C)', fontsize=18)
-        plt.legend(lines, labels, loc='lower left') # jks
+        plt.legend(lines, labels, loc='lower left',fontsize=15) # jks
         plt.title('SLF trends with microphysical modifications', fontsize=24)
         
         return isos_plot
@@ -611,12 +612,12 @@ class SatComp_Metric(object):
                      'clhcalipso_un':'CLDHGH_CAL_UN','cltcalipso_un':'CLDTOT_CAL_UN'
                     }
         self.ceres_var_dict = {
-            'toa_sw_all_mon':'FSNT','toa_lw_all_mon':'FLNT', # FSNT is wrong
-            'toa_sw_clr_t_mon':'FSNTC','toa_lw_clr_t_mon':'FLNTC', # not totally sure about t or c here
+            'toa_sw_all_mon':'FSNT','toa_lw_all_mon':'FLNT', # FSNT is wrong (needs reverse?)
+            'toa_sw_clr_t_mon':'FSNTC','toa_lw_clr_t_mon':'FLNTC', # _t_ means that it is derived from all observations and is more consistent with the model variable
             'toa_cre_sw_mon':'SWCF','toa_cre_lw_mon':'LWCF',
             'sfc_lw_down_all_mon':'FLDS','sfc_sw_down_all_mon':'FSDS',
-            'sfc_net_sw_all_mon':'FSNS','sfc_net_lw_all_mon':'FLNS'
-
+            'sfc_net_sw_all_mon':'FSNS','sfc_net_lw_all_mon':'FLNS',
+            'sfc_net_lw_clr_t_mon':'FLNSC','sfc_net_sw_clr_t_mon':'FSNSC' # The longwave needs to be reversed
 #             'toa_net_all_mon':'FNNTOA','toa_net_clr_c_mon':'FNNTOAC'
         }
         self.lat_bounds = [[-82,-70],[-70,-60],[-60,-50],[-50,-40],[-40,-30],
@@ -716,6 +717,8 @@ class SatComp_Metric(object):
 #         _ceres_data = xr.open_dataset('CERES_EBAF/CERES_EBAF_FLX_CRE_2X2.nc')
         _ceres_data = _ceres_data.sel(time=slice('2009-06-01', '2013-05-31'))
         _ceres_data = add_weights(_ceres_data)
+        # Flip FLNSC so it matches model convention (net-LW is down, net-SW is up)
+        _ceres_data['sfc_net_lw_clr_t_mon'] = -1*_ceres_data['sfc_net_lw_clr_t_mon']
         
         # Rename variables so they will match standard CAM variables names and index correctly
         self.ceres_data = _ceres_data.rename(self.ceres_var_dict)
@@ -984,7 +987,7 @@ class SatComp_Metric(object):
         ax.set_title('')
         
     def plot2D(self, var, projection='PlateCarree',layers=False,
-               seasonal=False, season=None, bias=False):
+               seasonal=False, season=None, bias=False,**kwargs):
         '''
         General surface plot function. Calls more specific plotting functions.
         Supports projections:
@@ -1016,11 +1019,11 @@ class SatComp_Metric(object):
                 print('''Layers prefix %s not found. Select from: \n
                 %s ''' % (var, str(list(self.layer_prefixes.keys()))))
                 return None
-            out = self.__layersplotwrapper(varlist, proj, bias=bias, season=season)
+            out = self.__layersplotwrapper(varlist, proj, bias=bias, season=season,**kwargs)
         elif seasonal:
-            out = self.__seasonalplotwrapper(var, proj, bias=bias)
+            out = self.__seasonalplotwrapper(var, proj, bias=bias,**kwargs)
         else:
-            out = self.__standard2Dplotwrapper(var, proj, bias=bias, season=season)
+            out = self.__standard2Dplotwrapper(var, proj, bias=bias, season=season,**kwargs)
                 
         return out
         
@@ -1105,7 +1108,7 @@ class SatComp_Metric(object):
                     obs_da = _season_da[self.seas_dict[season]].to_dataset(name=var)
                     
                 _ax, _im = self.standard2Dplot(var, obs_da, varax[0],
-                                projection=projection, bias=False)
+                                projection=projection, bias=False,**kwargs)
                 case_ax = varax[1:]
                 
         
@@ -1119,7 +1122,7 @@ class SatComp_Metric(object):
 
                 # Works with percents only
                 _ax, _im = self.standard2Dplot(var,_da, ax,projection=projection,
-                                               bias=bias)
+                                               bias=bias,**kwargs)
         
         yax = axes[:,0]
         xlabels = []
@@ -1232,9 +1235,20 @@ class SatComp_Metric(object):
 #             val = val.interp_like(obs) # quick interp fix for weird grid mismatch (bad.)
 
             val = val - obs
+    
+    
 
-            im = val.plot(ax=ax,cmap=plt.get_cmap('bwr'),transform=ccrs.PlateCarree(),
-                          add_colorbar=False, robust=True, **kwargs) #jks robust good?
+#             im = val.plot(ax=ax,cmap=plt.get_cmap('bwr'),transform=ccrs.PlateCarree(),
+#                           add_colorbar=False, robust=True, **kwargs) #jks robust good?
+#             im = val.plot(ax=ax,cmap=plt.get_cmap('icefire'),transform=ccrs.PlateCarree(),
+#                           add_colorbar=False, robust=True, **kwargs) #jks robust good?
+            if 'cmap' in kwargs.keys():
+                im = val.plot(ax=ax,transform=ccrs.PlateCarree(),
+                              add_colorbar=False, robust=True, **kwargs)
+            else:
+                im = val.plot(ax=ax,cmap=plt.get_cmap('bwr'),transform=ccrs.PlateCarree(),
+                              add_colorbar=False, robust=True, **kwargs)
+                
         else:
             im = val.plot(ax=ax,cmap=plt.get_cmap('jet'),transform=ccrs.PlateCarree(),
                       add_colorbar=False, robust=True, **kwargs) # robust good?
@@ -1298,7 +1312,10 @@ class SatComp_Metric(object):
         out_dict = {}
         out_list = []
         # Preprocessing observational data:
-        obs = obs_source[var].mean('time', skipna=True)
+        if season:
+            obs = season_mean(obs_source[var])[self.seas_dict[season]]#.to_dataset(name=var)
+        else:
+            obs = obs_source[var].mean('time', skipna=True)
             # calculate weighted average for goccp. Open bottom is arbitrary. 
             # Remember weird mask convention! dah!
         goccp_weights = obs_source['cell_weight']
@@ -1379,7 +1396,8 @@ class SatComp_Metric(object):
             
             plt.scatter(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, 
                         label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color)
-            labels.append(_run.label+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
+#             labels.append(_run.label+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
+            labels.append(_run.label) #+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
             lines.append(_line)
             
         plt.xlabel('SLF (%)', fontsize=18)
@@ -1510,15 +1528,17 @@ class SatComp_Metric(object):
             fig=None
         else:
             fig, axes = plt.subplots(nrows=1,ncols=1,figsize=[15,10])
-                
+        
+        labels = []         
         obs_source, obs_label = self.__get_data_source(var)
         obs_source = obs_source.sel(lat=slice(lat_range[0],lat_range[1]))
         obs_vals = self.__average_and_wrap(obs_source[var],wrap=False)
         if not bias:
             obs_vals.plot(ax=axes,label=obs_label, color='black')
+            labels.append(obs_label)
         
         lines = []
-        labels = []
+#         labels = []
         for k,color in zip(self.cases,self.colors):
             _run = self.cases[k]
             _da = _run.case_da.sel(lat=slice(lat_range[0],lat_range[1]))
@@ -1623,11 +1643,20 @@ class SatComp_Metric(object):
         Helper function for cloud_polar_plot
         '''
         _dat = da.groupby('time.month').mean() # Create monthly averages
-        _dat = _dat.mean(['lat','lon'])#.values # Get np.array average
-        if wrap:
-            _dat = np.append(_dat, _dat[0]) # wrap
+#         _dat = _dat.mean(['lat','lon'])#.values # Get np.array average, ! JKS use masked average
         
-        return _dat
+        # Gridcell weighting fix
+        dat2 = add_weights(_dat)
+        _weights = dat2['cell_weight']
+            
+        out_dat = masked_average(dat2, dim=['lat','lon'], weights=_weights)
+        
+        if wrap:
+#             _dat = np.append(_dat, _dat[0]) # wrap
+            out_dat = np.append(out_dat, out_dat[0]) # wrap
+        
+        return out_dat
+#         return _dat
     
     def __seasonalize_for_sum(self, da, var, season):
         ''' Helper function for plot_cloud_sum'''
