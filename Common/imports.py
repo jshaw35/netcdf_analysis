@@ -52,6 +52,14 @@ from collections import Iterable
 from collections import deque
 #import pyaerocom as pya
 
+# libraries (additions from Jen)
+from pathlib import Path
+import numpy.linalg as LA
+import timeit
+from cartopy import config
+import scipy.stats as stats # imports stats functions https://docs.scipy.org/doc/scipy/reference/stats.html
+from cartopy.util import add_cyclic_point
+import cartopy.feature as cfeature
 import re # regular expressions
 
 def load_and_reload():
@@ -77,4 +85,3 @@ def load_and_reload():
 
 
 load_and_reload()
-
