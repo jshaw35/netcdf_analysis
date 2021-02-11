@@ -217,7 +217,7 @@ class CT_SLF_Metric(object):
         caliop_stdev = 100*np.std(ct_slf['SLF'].sel(lat=slice(lat_range[0],lat_range[1])), axis=(0,1))
         _line = plt.errorbar(caliop_slf, caliop_slf['isotherm'], xerr=caliop_stdev, label='CALIOP SLF', color = 'black', zorder=0, linestyle='-', marker='D')# fmt='o',
                
-        labels = ['CALIOP Cloudtop SLF','CALIOP Cloudbulk SLF']
+        labels = ['CALIOP cloud-top SLF','CALIOP cloud-bulk SLF']
         lines = [_line, ic_line] 
         for i,color in zip(self.cases, self.colors): # [3:] jks
             _run = self.cases[i]
@@ -250,7 +250,8 @@ class CT_SLF_Metric(object):
             
             plt.scatter(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color)
             plt.plot(slf_bulk, slf_bulk['isotherms_mpc'] - 273.15, label=(_run.label+' RMSE: %.2f' % rms_bulk), color=color,linestyle='dashed')
-            labels.append(_run.label+' (%.2f, %.2f)' % (rms_ct, rms_bulk))
+            labels.append(_run.label)
+#             labels.append(_run.label+' (%.2f, %.2f)' % (rms_ct, rms_bulk))
 #             labels.append(_run.label+' CT_RMSE: %.2f, Bulk_RMSE: %.2f' % (rms_ct, rms_bulk))
             lines.append(_line)
         plt.xlim([-5,105])    
@@ -555,6 +556,15 @@ class SatComp_Metric(object):
             self.cases = {}
             self.case_labels = []
             self.colors = sns.color_palette("colorblind")
+            self.styles = [(0, (1, 5)), # dotted
+                           (0, (1, 1)), # densely dotted
+                           (0, (5, 5)), # dashed
+                           (0, (5, 1)), # densely dashed
+                           (0, (3, 5, 1, 5)), # dashdotted
+                           (0, (3, 1, 1, 1)), # densely dashdotted
+                           (0, (3, 5, 1, 5, 1, 5)), # dashdotdotted
+                           (0, (1, 1, 1, 1, 1, 3))] # densely dashdotdotted
+#             self.markers = matplotlib.lines.MarkerStyle.markers.keys()
 #             self.colors = ['red','orange','yellow','green','blue','purple','pink']
             self.__addlistsanddicts()
             
@@ -1534,18 +1544,19 @@ class SatComp_Metric(object):
         obs_source = obs_source.sel(lat=slice(lat_range[0],lat_range[1]))
         obs_vals = self.__average_and_wrap(obs_source[var],wrap=False)
         if not bias:
-            obs_vals.plot(ax=axes,label=obs_label, color='black')
+            obs_vals.plot(ax=axes,label=obs_label,linestyle='-', color='black')
             labels.append(obs_label)
         
         lines = []
 #         labels = []
-        for k,color in zip(self.cases,self.colors):
+        for k,color,style in zip(self.cases,self.colors,self.styles):
             _run = self.cases[k]
             _da = _run.case_da.sel(lat=slice(lat_range[0],lat_range[1]))
             mon_vals = self.__average_and_wrap(_da[var],wrap=False)
             if bias:
                 mon_vals = mon_vals - obs_vals
-            _ln = mon_vals.plot(ax=axes,label=_run.label, color=color, **kwargs)
+            _ln = mon_vals.plot(ax=axes,label=_run.label, color=color,
+                                linestyle=style,**kwargs)
             _lbl = _run.label
             
 #             lines.append(_ln)
