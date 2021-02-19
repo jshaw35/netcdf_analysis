@@ -627,7 +627,8 @@ class SatComp_Metric(object):
             'toa_cre_sw_mon':'SWCF','toa_cre_lw_mon':'LWCF',
             'sfc_lw_down_all_mon':'FLDS','sfc_sw_down_all_mon':'FSDS',
             'sfc_net_sw_all_mon':'FSNS','sfc_net_lw_all_mon':'FLNS',
-            'sfc_net_lw_clr_t_mon':'FLNSC','sfc_net_sw_clr_t_mon':'FSNSC' # The longwave needs to be reversed
+            'sfc_net_lw_clr_t_mon':'FLNSC','sfc_net_sw_clr_t_mon':'FSNSC', # The longwave needs to be reversed
+            'sfc_sw_up_all_mon':'FSUS','sfc_lw_up_all_mon':'FLUS',
 #             'toa_net_all_mon':'FNNTOA','toa_net_clr_c_mon':'FNNTOAC'
         }
         self.lat_bounds = [[-82,-70],[-70,-60],[-60,-50],[-50,-40],[-40,-30],
@@ -706,12 +707,14 @@ class SatComp_Metric(object):
     def __load_CALIOP_olimpia(self):
         print('Loading CALIOP SLFs...', end = '')
         try:
-            self.ct_caliop_slf = xr.open_dataset('caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
+            self.ct_caliop_slf = xr.open_dataset('caliop_olimpia_new/netcdf_format/ct_slfs_annual.nc')
+#             self.ct_caliop_slf = xr.open_dataset('caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
         except:
             print('Could not load cloudtop CALIOP slfs from caliop_olimpia/ct_slf_olimpia/cloudtop_slfs.nc')
             return
         try:
-            self.incloud_caliop_slf = xr.open_dataset('caliop_olimpia/incloud_slf_olimpia/incloud_slfs.nc')
+            self.incloud_caliop_slf = xr.open_dataset('caliop_olimpia_new/netcdf_format/bulk_slfs_annual.nc')
+#             self.incloud_caliop_slf = xr.open_dataset('caliop_olimpia/incloud_slf_olimpia/incloud_slfs.nc')
         except: 
             print('Could not load incloud CALIOP slfs from caliop_olimpia/incloud_slf_olimpia/incloud_slfs.nc')
             return
@@ -727,8 +730,14 @@ class SatComp_Metric(object):
 #         _ceres_data = xr.open_dataset('CERES_EBAF/CERES_EBAF_FLX_CRE_2X2.nc')
         _ceres_data = _ceres_data.sel(time=slice('2009-06-01', '2013-05-31'))
         _ceres_data = add_weights(_ceres_data)
-        # Flip FLNSC so it matches model convention (net-LW is down, net-SW is up)
+        # Flip LW vars to match model convention (net-LW is down, net-SW is up)
         _ceres_data['sfc_net_lw_clr_t_mon'] = -1*_ceres_data['sfc_net_lw_clr_t_mon']
+        _ceres_data['sfc_net_lw_clr_c_mon'] = -1*_ceres_data['sfc_net_lw_clr_c_mon']
+        _ceres_data['sfc_net_lw_all_mon'] = -1*_ceres_data['sfc_net_lw_all_mon']
+        _ceres_data['LWCFS'] = _ceres_data['sfc_cre_net_lw_mon']
+        _ceres_data['SWCFS'] = _ceres_data['sfc_cre_net_sw_mon']
+#         _ceres_data['SWCFS'] = _ceres_data['sfc_net_sw_all_mon'] - _ceres_data['sfc_net_sw_clr_t_mon'] # positive downwards
+#         _ceres_data['LWCFS'] = -1*(_ceres_data['sfc_net_lw_all_mon'] - _ceres_data['sfc_net_lw_clr_t_mon']) # positive upwards, bleh
         
         # Rename variables so they will match standard CAM variables names and index correctly
         self.ceres_data = _ceres_data.rename(self.ceres_var_dict)
@@ -1548,8 +1557,13 @@ class SatComp_Metric(object):
             labels.append(obs_label)
         
         lines = []
+        if 'linestyle' in kwargs.keys():
+            styles = [kwargs['linestyle'] for i in self.colors]
+            del kwargs['linestyle']
+        else:
+            styles = self.styles
 #         labels = []
-        for k,color,style in zip(self.cases,self.colors,self.styles):
+        for k,color,style in zip(self.cases,self.colors,styles):
             _run = self.cases[k]
             _da = _run.case_da.sel(lat=slice(lat_range[0],lat_range[1]))
             mon_vals = self.__average_and_wrap(_da[var],wrap=False)
@@ -1716,7 +1730,11 @@ class SatComp_case:
         # Normalize calculated SLF values.
         ds['IC_SLF'] = ds['SLFXCLD_ISOTM']/ds['CLD_ISOTM']
         ds['CT_SLF'] = ds['CT_SLFXCLD_ISOTM']/ds['CT_CLD_ISOTM']
-
+        
+        # Calculate Surface Cloud Radiative Effects
+        ds['SWCFS'] = ds['FSNS'] - ds['FSNSC']
+        ds['LWCFS'] = -1*(ds['FLNS'] - ds['FLNSC']) # long-wave sign convention
+#         ds['FLDSC'] = ds[]
         self.case_da = ds
         
         print("%s load successfully." % self.case)
