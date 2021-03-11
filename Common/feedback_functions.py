@@ -133,7 +133,7 @@ def autolabel4(line,ax,case=None):
                     ha='center', va='bottom')
         
         
-def weight_feedbacks(case_dict,weights=None,labels=None):
+def weight_feedbacks(case_dict,weights=None,labels=None,lat_range=[66,82]):
     '''
     Takes a dictionary of organized feedbacks/cases.
     Computes an annual average for each feedback and
@@ -174,7 +174,7 @@ def weight_feedbacks(case_dict,weights=None,labels=None):
         cases.append(_mod)
         for _var in _da.data_vars:
             _ds = _da[_var]
-            mask = _ds['lat'] < 66
+            mask = np.bitwise_or(_ds['lat']<=lat_range[0],_ds['lat']>lat_range[1])
             _arc_val = masked_average(_ds,dim=['lat','lon','month'],weights=all_weights,mask=mask)
     #             print(_var, ": ", _arc_val.values)
             if weights: # Normalize by Arctic increase
@@ -348,8 +348,11 @@ def plot_months_line(dict_cases, var, lat_range=[66,82], dTS=None,
             out_dat = out_dat / dTS[k]
         if labels:
             _lbl = labels[k]
+#             plt.legend(labels.keys()) # JKS
         else:
             _lbl = k
+            labels = dict_cases
+#             plt.legend(dict_cases.keys())
 
         _ln = out_dat.plot(ax=axes,label=_lbl, color=color, **kwargs)
 

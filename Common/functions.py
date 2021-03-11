@@ -405,7 +405,8 @@ def to_png(file, filename):
     '''
     Simple function for one-line saving.
     '''
-    output_dir = 'figures/'
+#     output_dir = 'figures/'
+    output_dir = '/mnt/mcc-ns9600k/jonahks/figures/'
     ext = 'png'
     full_path = '%s%s.%s' % (output_dir,filename,ext)
 
