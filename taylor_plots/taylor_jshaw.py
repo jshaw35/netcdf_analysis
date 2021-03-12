@@ -1,7 +1,7 @@
 # Original code by Hillman.
 # Updating by Jonah Shaw for CESM2/CAM6 COSP comparison.
 
-import numpy
+import numpy as np
 import matplotlib.artist as artist
 import matplotlib.patches as patches
 import matplotlib.lines as lines
@@ -11,15 +11,12 @@ from matplotlib.axes import Axes
 def regrid(data1,lat1,lon1,lat2,lon2):
 
     # check inputs
-    if len(lat1) < len(lat2):
-        print 'Target grid is higher resolution than input grid.'
-        raise
-    if len(lon1) < len(lon2):
+    if ((len(lat1) < len(lat2)) or (len(lon1) < len(lon2))):
         print 'Target grid is higher resolution than input grid.'
         raise
 
     shape = (len(lat2),len(lon2))
-    data2 = numpy.ma.zeros(shape,dtype=data1.dtype,) # use same resolution as data1
+    data2 = np.ma.zeros(shape,dtype=data1.dtype,) # use same resolution as data1
     if 'fill_value' in dir(data1): # dir?
         data2.fill_value = data1.fill_value # mask where the target grid is masked
 
@@ -27,8 +24,8 @@ def regrid(data1,lat1,lon1,lat2,lon2):
     # This a nearest neighbor approach. Is that ok?
     for idx2,lon in enumerate(lon2):
         for idy2,lat in enumerate(lat2):
-            idx1 = numpy.abs(lon1 - lon).argmin()
-            idy1 = numpy.abs(lat1 - lat).argmin() 
+            idx1 = np.abs(lon1 - lon).argmin()
+            idy1 = np.abs(lat1 - lat).argmin() 
             data2[...,idy2,idx2] = data1[...,idy1,idx1]
     return data2
 
@@ -59,17 +56,17 @@ class Taylor_statistics():
         cntl_data = regrid(cntl_data,cntl_lat,cntl_lon,lat,lon)
 
         # calculate weights
-        lat_weights = numpy.cos(lat[:]*numpy.pi/180.)
+        lat_weights = np.cos(lat[:]*np.pi/180.)
         lat_weights = lat_weights/lat_weights.sum()
 
         # make full lat,lon dimensioned weight array
-        weight_array = numpy.ma.ones([len(lat),len(lon)])
+        weight_array = np.ma.ones([len(lat),len(lon)])
         for idx in range(len(lon)):
             weight_array[:,idx] = lat_weights[:]
 
         # mask missing values
-        test_data.mask = numpy.ma.mask_or(test_data.mask,cntl_data.mask)
-        cntl_data.mask = numpy.ma.mask_or(test_data.mask,cntl_data.mask)
+        test_data.mask = np.ma.mask_or(test_data.mask,cntl_data.mask)
+        cntl_data.mask = np.ma.mask_or(test_data.mask,cntl_data.mask)
         weight_array.mask = test_data.mask
 
         # calculate statistics
@@ -79,16 +76,16 @@ class Taylor_statistics():
         """Calculate Taylor statistics for making taylor diagrams."""
 
         # calculate sums and means
-        sumwgt = numpy.ma.sum(wgt)
-        meantest = numpy.ma.sum(wgt*test)/sumwgt
-        meancntl = numpy.ma.sum(wgt*cntl)/sumwgt
+        sumwgt = np.ma.sum(wgt)
+        meantest = np.ma.sum(wgt*test)/sumwgt
+        meancntl = np.ma.sum(wgt*cntl)/sumwgt
 
         # calculate variances
-        stdtest = (numpy.ma.sum(wgt*(test-meantest)**2.0)/sumwgt)**0.5
-        stdcntl = (numpy.ma.sum(wgt*(cntl-meancntl)**2.0)/sumwgt)**0.5
+        stdtest = (np.ma.sum(wgt*(test-meantest)**2.0)/sumwgt)**0.5
+        stdcntl = (np.ma.sum(wgt*(cntl-meancntl)**2.0)/sumwgt)**0.5
 
         # calculate correlation coefficient
-        ccnum = numpy.ma.sum(wgt*(test-meantest)*(cntl-meancntl))
+        ccnum = np.ma.sum(wgt*(test-meantest)*(cntl-meancntl))
         ccdem = sumwgt*stdtest*stdcntl
         self.cc = ccnum/ccdem
 
@@ -96,11 +93,11 @@ class Taylor_statistics():
         self.ratio = stdtest/stdcntl
 
         # calculate bias
-        self.bias = (meantest - meancntl)/numpy.abs(meancntl)
+        self.bias = (meantest - meancntl)/np.abs(meancntl)
         #self.bias = meantest - meancntl
 
         # calculate centered pattern RMS difference
-        rmssum = numpy.ma.sum(wgt*((test-meantest)-(cntl-meancntl))**2.0)
+        rmssum = np.ma.sum(wgt*((test-meantest)-(cntl-meancntl))**2.0)
         rmserr = (rmssum/sumwgt)**0.5
         self.rmsnorm = rmserr/stdcntl
 
@@ -128,19 +125,19 @@ class Taylor_diagram():
 
         # plot size
         #self.xymax = 1.50
-        self.xymax = numpy.max([1.50,numpy.max(ratio)+numpy.max(bias)/2.0])
+        self.xymax = np.max([1.50,np.max(ratio)+np.max(bias)/2.0])
 
         # draw axes
         self.draw_axes(ratio,cc)
 
         # add some reference arcs
         self.draw_ratio(1.0,linestyle='solid',color='black')
-        self.draw_ratio(numpy.min(ratio),linestyle='dotted',color='black')
-        self.draw_ratio(numpy.max(ratio),linestyle='dotted',color='black')
+        self.draw_ratio(np.min(ratio),linestyle='dotted',color='black')
+        self.draw_ratio(np.max(ratio),linestyle='dotted',color='black')
 
         # draw some reference lines
-        self.draw_radii(numpy.min(cc))
-        self.draw_radii(numpy.max(cc))
+        self.draw_radii(np.min(cc))
+        self.draw_radii(np.max(cc))
 
         # draw points
         self.draw_point(
@@ -155,12 +152,12 @@ class Taylor_diagram():
             self.draw_rms(max(rms))
 
     def polar_transform(self,r,theta):
-        x = r*numpy.cos(theta)
-        y = r*numpy.sin(theta)
+        x = r*np.cos(theta)
+        y = r*np.sin(theta)
         return x,y
 
     def draw_radii(self,cc,color='black',linestyle='dotted'):
-        theta = numpy.arccos(cc)
+        theta = np.arccos(cc)
         x,y = self.polar_transform(self.xymax,theta)
         self.ax.plot([0,x],[0,y],':k',linewidth=0.5)
 
@@ -200,13 +197,13 @@ class Taylor_diagram():
         self.ax.xaxis.set_label_text('Relative standard deviation')
 
         # x-axis tickmarks
-        xmajorticks = numpy.arange(0.0,self.xymax+0.01,0.25)
+        xmajorticks = np.arange(0.0,self.xymax+0.01,0.25)
         xmajorticklabels = []
-        xminorticks = [numpy.min(ratio),numpy.max(ratio)]
-        xminorticklabels = ["%.2f"%(numpy.min(ratio)),"%.2f"%(numpy.max(ratio))]
+        xminorticks = [np.min(ratio),np.max(ratio)]
+        xminorticklabels = ["%.2f"%(np.min(ratio)),"%.2f"%(np.max(ratio))]
 
         # y-axis tickmarks
-        ymajorticks = numpy.arange(0.0,self.xymax+0.01,0.25)
+        ymajorticks = np.arange(0.0,self.xymax+0.01,0.25)
         ymajorticklabels = []
         for idy in range(len(ymajorticks)):
             if idy%2 == 0:
@@ -218,10 +215,10 @@ class Taylor_diagram():
         ccmajorticks = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
         ccminorticks = [0.91,0.92,0.93,0.94,0.95,0.96,0.97,0.98,0.99]
         ccmajorticklabellocs = [
-                0.5,0.95,numpy.min(cc),numpy.max(cc)
+                0.5,0.95,np.min(cc),np.max(cc)
             ]
         ccmajorticklabels = [
-                "0.5","0.95","%.2f"%(numpy.min(cc)),"%.2f"%(numpy.max(cc))
+                "0.5","0.95","%.2f"%(np.min(cc)),"%.2f"%(np.max(cc))
             ]
 
         # set and draw tickmarks
@@ -243,15 +240,15 @@ class Taylor_diagram():
         minorticklength = self.xymax*0.01
         for cctick in ccmajorticks:
             r = [self.xymax-majorticklength,self.xymax            ]
-            theta = [numpy.arccos(cctick),numpy.arccos(cctick)]
+            theta = [np.arccos(cctick),np.arccos(cctick)]
             x,y = self.polar_transform(r,theta)
             self.ax.plot(x,y,'-k')
         for i,ccticklabel in enumerate(ccmajorticklabels):
-            x,y = self.polar_transform(self.xymax,numpy.arccos(ccmajorticklabellocs[i]))
+            x,y = self.polar_transform(self.xymax,np.arccos(ccmajorticklabellocs[i]))
             self.ax.text(x,y,ccticklabel,color="black")
         for cctick in ccminorticks:
             r = [self.xymax-minorticklength,self.xymax            ]
-            theta = [numpy.arccos(cctick),numpy.arccos(cctick)]
+            theta = [np.arccos(cctick),np.arccos(cctick)]
             x,y = self.polar_transform(r,theta)
             self.ax.plot(x,y,'-k')
  
@@ -275,8 +272,8 @@ class Taylor_diagram():
 
                 # transform coordinates
                 r = ratio[ivar,:]
-                theta = numpy.arccos(cc[ivar,:])
-                size = numpy.abs(bias[ivar,:])/2.0
+                theta = np.arccos(cc[ivar,:])
+                size = np.abs(bias[ivar,:])/2.0
                 x,y = self.polar_transform(r,theta)
                 for icase in range(ncases):
 
@@ -315,8 +312,8 @@ class Taylor_diagram():
 
             # transform coordinates
             r = ratio
-            theta = numpy.arccos(cc)
-            size = numpy.abs(bias)/2.0
+            theta = np.arccos(cc)
+            size = np.abs(bias)/2.0
             x,y = self.polar_transform(r,theta)
             for icase in range(len(x)):
 
@@ -354,8 +351,8 @@ class Taylor_diagram():
                         )
 
     def draw_rms(self,r,color='black',linestyle='dotted'):
-        tmp = numpy.pi - numpy.arccos((r**2.0 + 1 - self.xymax**2.0)/2*r)
-        theta1 = numpy.max([0.0,180.0/numpy.pi*tmp])
+        tmp = np.pi - np.arccos((r**2.0 + 1 - self.xymax**2.0)/2*r)
+        theta1 = np.max([0.0,180.0/np.pi*tmp])
         theta2 = 180.0
         arc = patches.Arc(
                 [1,0],2*r,2*r,

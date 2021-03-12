@@ -1,26 +1,24 @@
 #!/usr/bin/env python
 
 # Original Code by Hillman
-# Some comments and changes from Jonah Shaw
+# Changes from Jonah Shaw to use xarray instead of NetCDF python package
 
-import numpy as numpy
-import Scientific.IO.NetCDF as NetCDF
+import numpy as np
+# import Scientific.IO.NetCDF as NetCDF
+import xarray as xr
 import taylor as taylor
-import matplotlib.pyplot as pyplot
+import matplotlib.pyplot as plt
 import matplotlib as matplotlib
 import matplotlib.patches as patches
 
-def get_data(inptr,varname):
-    '''returns an array where the _FillValues or 
-    missing_value cells are masked, great!'''
-    
+def get_data(inptr,varname): # hopefully this works with xarray as weel as NetCDF
     if '_FillValue' in dir(inptr.variables[varname]):
-        data = numpy.ma.masked_values(
+        data = np.ma.masked_values(
                 inptr.variables[varname].getValue(),
                 getattr(inptr.variables[varname],'_FillValue'),
             )
     elif 'missing_value' in dir(inptr.variables[varname]):
-        data = numpy.ma.masked_values(
+        data = np.ma.masked_values(
                 inptr.variables[varname].getValue(),
                 getattr(inptr.variables[varname],'missing_value'),
             )
@@ -28,7 +26,7 @@ def get_data(inptr,varname):
         data = inptr.variables[varname].getValue()
     return data
 
-# Control names dictionary
+# Control names dictionary (i.e. observations)
 cntlnames = {
         'SWCFTOA': 'CERES-EBAF',
         'LWCFTOA': 'CERES-EBAF',
@@ -46,7 +44,7 @@ cntlnames = {
 testnames = ('CAM4','CAM5')
 testcolors = ('SkyBlue','Firebrick')
 
-# Cloud forcing plot
+# Cloud forcing plot (each sublist is what?)
 varlist = (
         ('SWCFTOA','LWCFTOA'),
         ('CLDTOT_ISCCPCOSP','CLDTOT_MISR','CLDTOT_CAL'),
@@ -60,23 +58,24 @@ matplotlib.rcParams['font.size'] = 10
 matplotlib.rcParams['text.usetex'] = True
 
 # Open figure
-figure = pyplot.figure()
+figure = plt.figure()
 
 for iplot,varnames in enumerate(varlist):
     print varnames
     nvars = len(varnames)
     ntest = len(testnames)
 
-    cc = numpy.zeros([nvars,ntest])
-    ratio = numpy.zeros([nvars,ntest])
-    bias = numpy.zeros([nvars,ntest])
+    cc = np.zeros([nvars,ntest])
+    ratio = np.zeros([nvars,ntest])
+    bias = np.zeros([nvars,ntest])
 
     # Loop over variables
     for ivar,varname in enumerate(varnames):
 
         # read data, from the control file (obs?)
         cntl_file = 'plotvars/'+cntlnames[varname]+'.'+varname+'.nc'
-        cntl_inptr = NetCDF.NetCDFFile(cntl_file,'r')
+#         cntl_inptr = NetCDF.NetCDFFile(cntl_file,'r') # JKS ISSUE
+        cntl_inptr = xr.open_dataset(cntl_file) # JKS ISSUE
         cntl_data = get_data(cntl_inptr,varname) # requested variable field
         cntl_lat = cntl_inptr.variables['lat'].getValue() # lat coord
         cntl_lon = cntl_inptr.variables['lon'].getValue() # lon coord
@@ -88,7 +87,8 @@ for iplot,varnames in enumerate(varlist):
 
             # Read data, from model
             test_file = 'plotvars/'+testname+'.'+varname+'.nc'
-            test_inptr = NetCDF.NetCDFFile(test_file,'r')
+#             test_inptr = NetCDF.NetCDFFile(test_file,'r') # ISSUE
+            test_inptr = xr.open_dataset(test_file) # JKS issue
             test_data = get_data(test_inptr,varname)
             test_lat = test_inptr.variables['lat'].getValue()
             test_lon = test_inptr.variables['lon'].getValue()
