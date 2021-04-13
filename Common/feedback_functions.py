@@ -133,7 +133,7 @@ def autolabel4(line,ax,case=None):
                     ha='center', va='bottom')
         
         
-def weight_feedbacks(case_dict,weights=None,labels=None,lat_range=[66,82]):
+def weight_feedbacks(case_dict,weights=None,labels=None,lat_range=[66,90]):
     '''
     Takes a dictionary of organized feedbacks/cases.
     Computes an annual average for each feedback and
@@ -412,3 +412,12 @@ def barplot_single(case_dict,weighted_fbs,var,labels=None,vals=None, ax=None,**k
     ax.set_ylabel('[Wm$^{-2}$K$^{-1}$]',fontsize=18)
     
     return fig,ax,val_dict
+
+
+def get_APRP(case_path):
+    fb_dir ='feedbacks_soden/mod_by_me/output_jonahks/'
+    _fbs = os.listdir("%s/%s" % (fb_dir,case_path)) # List feedback files
+    _aprp_file = [i for i in _fbs if "APRPsw_feedback" in i][0]
+    _aprp = add_weights(xr.open_dataset("%s/%s/%s" % (fb_dir,case_path,_aprp_file)))
+        
+    return _aprp
