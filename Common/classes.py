@@ -1731,9 +1731,12 @@ class SatComp_case:
         ds['IC_SLF'] = ds['SLFXCLD_ISOTM']/ds['CLD_ISOTM']
         ds['CT_SLF'] = ds['CT_SLFXCLD_ISOTM']/ds['CT_CLD_ISOTM']
         
-        # Calculate Surface Cloud Radiative Effects
-        ds['SWCFS'] = ds['FSNS'] - ds['FSNSC']
-        ds['LWCFS'] = -1*(ds['FLNS'] - ds['FLNSC']) # long-wave sign convention
+        # Calculate Surface Cloud Radiative Effects (not essential?)
+        try:
+            ds['SWCFS'] = ds['FSNS'] - ds['FSNSC']
+            ds['LWCFS'] = -1*(ds['FLNS'] - ds['FLNSC']) # long-wave sign convention
+        except:
+            pass
 #         ds['FLDSC'] = ds[]
         self.case_da = ds
         

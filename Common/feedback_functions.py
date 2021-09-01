@@ -298,13 +298,62 @@ def calc_arc_dT(initial_ts,final_ts,lat_range=[66,90]):
     This function takes the path to inital and final 
     surface temperature files. It averages over months and
     calculates the average annual warming in the Arctic (>66N), 
-    weighting by cell area and month length.
+    weighting by cell area and month length. BAD because we should average first??
     '''
     
     # Open TS timeseriesinput files
     ts_i = xr.open_dataset(initial_ts)
     ts_f = xr.open_dataset(final_ts)
 
+    # Take the difference and average across months.
+    _d_ts = (ts_f['TS'] - ts_i['TS']).groupby('time.month').mean('time')
+    d_ts = add_weights(_d_ts.to_dataset())
+
+    # Create month length object for weighting
+    wgt_mon=[31,28,31,30,31,30,31,31,30,31,30,31] # month length (days)
+    month_length = xr.DataArray(wgt_mon, coords=[d_ts['month']], name='month_length')
+
+    # Combine weights via matrix product
+    all_weights = month_length @ d_ts['cell_weight']
+
+#     mask = d_ts['lat'] < 66 # Mask below the Arctic
+    mask = np.bitwise_or(d_ts['lat']<=lat_range[0],d_ts['lat']>lat_range[1])
+    _arc_val = masked_average(d_ts['TS'],dim=['lat','lon','month'],weights=all_weights,mask=mask)
+    
+    return _arc_val
+    
+def calc_arc_dT2(initial_ts,final_ts,lat_range=[66,90]):
+    '''
+    This function takes the path to inital and final 
+    surface temperature files. It averages over months and
+    calculates the average annual warming in the Arctic (>66N), 
+    weighting by cell area and month length. 
+    GOOD because it averages first? Lol, they perform the same (nearly).
+    '''
+    
+    # Open TS timeseriesinput files
+    ts_i = xr.open_dataset(initial_ts)
+    ts_f = xr.open_dataset(final_ts)
+    
+    ts_i = add_weights(ts_i.groupby('time.month').mean('time'))
+    ts_f = ts_f.groupby('time.month').mean('time')
+
+    # Create month length object for weighting
+    wgt_mon=[31,28,31,30,31,30,31,31,30,31,30,31] # month length (days)
+    month_length = xr.DataArray(wgt_mon, coords=[ts_i['month']], name='month_length')
+    
+    mask = np.bitwise_or(ts_i['lat']<=lat_range[0],ts_i['lat']>lat_range[1])
+    weights = month_length @ ts_i['cell_weight']
+    
+    _arc_ts_i = masked_average(ts_i['TS'],dim=['lat','lon','month'],weights=weights,mask=mask)
+    _arc_ts_f = masked_average(ts_f['TS'],dim=['lat','lon','month'],weights=weights,mask=mask)
+    
+    print('_arc_ts_i: ',_arc_ts_i.values)
+    print('_arc_ts_f: ',_arc_ts_f.values)
+    _d_ts = _arc_ts_f - _arc_ts_i
+    
+    return _d_ts
+    
     # Take the difference and average across months.
     _d_ts = (ts_f['TS'] - ts_i['TS']).groupby('time.month').mean('time')
     d_ts = add_weights(_d_ts.to_dataset())
