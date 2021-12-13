@@ -401,17 +401,17 @@ def share_ylims(axes):
     for ax in axes:
         ax.set_ylim([ymin,ymax])
         
-def to_png(file, filename):
+def to_png(file, filename,ext = 'png'):
     '''
     Simple function for one-line saving.
     '''
 #     output_dir = 'figures/'
     output_dir = '/mnt/mcc-ns9600k/jonahks/figures/'
-    ext = 'png'
+    
     full_path = '%s%s.%s' % (output_dir,filename,ext)
 
     if not os.path.exists(output_dir + filename):
-        file.savefig(full_path,format = 'png', dpi = 200)
+        file.savefig(full_path,format = ext, dpi = 300)
 #         file.clf()
         
     else:

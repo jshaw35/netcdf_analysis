@@ -322,13 +322,14 @@ def calc_arc_dT(initial_ts,final_ts,lat_range=[66,90]):
     
     return _arc_val
     
-def calc_arc_dT2(initial_ts,final_ts,lat_range=[66,90]):
+def calc_arc_dT2(initial_ts,final_ts,lat_range=[66,90],var='TS',dims=['lat','lon','month']):
     '''
     This function takes the path to inital and final 
     surface temperature files. It averages over months and
     calculates the average annual warming in the Arctic (>66N), 
     weighting by cell area and month length. 
     GOOD because it averages first? Lol, they perform the same (nearly).
+    ^i.e. This is the difference between the average TS fields, other is the average difference between TS fields
     '''
     
     # Open TS timeseriesinput files
@@ -345,31 +346,14 @@ def calc_arc_dT2(initial_ts,final_ts,lat_range=[66,90]):
     mask = np.bitwise_or(ts_i['lat']<=lat_range[0],ts_i['lat']>lat_range[1])
     weights = month_length @ ts_i['cell_weight']
     
-    _arc_ts_i = masked_average(ts_i['TS'],dim=['lat','lon','month'],weights=weights,mask=mask)
-    _arc_ts_f = masked_average(ts_f['TS'],dim=['lat','lon','month'],weights=weights,mask=mask)
+    _arc_ts_i = masked_average(ts_i[var],dim=dims,weights=weights,mask=mask)
+    _arc_ts_f = masked_average(ts_f[var],dim=dims,weights=weights,mask=mask)
+    ts_i.close()
+    ts_f.close()
     
-    print('_arc_ts_i: ',_arc_ts_i.values)
-    print('_arc_ts_f: ',_arc_ts_f.values)
     _d_ts = _arc_ts_f - _arc_ts_i
     
     return _d_ts
-    
-    # Take the difference and average across months.
-    _d_ts = (ts_f['TS'] - ts_i['TS']).groupby('time.month').mean('time')
-    d_ts = add_weights(_d_ts.to_dataset())
-
-    # Create month length object for weighting
-    wgt_mon=[31,28,31,30,31,30,31,31,30,31,30,31] # month length (days)
-    month_length = xr.DataArray(wgt_mon, coords=[d_ts['month']], name='month_length')
-
-    # Combine weights via matrix product
-    all_weights = month_length @ d_ts['cell_weight']
-
-#     mask = d_ts['lat'] < 66 # Mask below the Arctic
-    mask = np.bitwise_or(d_ts['lat']<=lat_range[0],d_ts['lat']>lat_range[1])
-    _arc_val = masked_average(d_ts['TS'],dim=['lat','lon','month'],weights=all_weights,mask=mask)
-    
-    return _arc_val
     
     
 def plot_months_line(dict_cases, var, lat_range=[66,82], dTS=None,
